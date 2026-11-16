@@ -1,0 +1,53 @@
+# ===== IDE =====
+.idea/
+*.iml
+.vscode/
+*.swp
+
+# ===== Java / Maven =====
+target/
+*.class
+*.jar
+*.war
+!.mvn/wrapper/maven-wrapper.jar
+.mvn/timing.properties
+
+# ===== Node / 前端 =====
+node_modules/
+dist/
+dist-ssr/
+.vite/
+*.local
+npm-debug.log*
+yarn-error.log*
+pnpm-debug.log*
+
+# ===== 日志与临时文件 =====
+*.log
+app.log
+vite.log
+npm-install.log
+logs/
+*.tmp
+*.bak
+
+# ===== 系统 =====
+.DS_Store
+Thumbs.db
+desktop.ini
+
+# ===== 敏感配置（真实密钥不要提交）=====
+.env
+.env.local
+.env.*.local
+application-local.yml
+application-prod.yml
+
+# ===== 打包产物 =====
+*.tgz
+*.rar
+library-system-src.zip
+
+# ===== 截图产物（脚本调试用）=====
+screenshots/
+*.png.orig

@@ -1,0 +1,24 @@
+# 统一 Git 的行尾处理，避免 Windows/Linux 协作出现整文件 diff
+* text=auto eol=lf
+
+# Windows 脚本必须 CRLF
+*.bat text eol=crlf
+*.cmd text eol=crlf
+
+# Linux 脚本必须 LF
+*.sh  text eol=lf
+
+# 二进制文件不做行尾转换
+*.png  binary
+*.jpg  binary
+*.jpeg binary
+*.gif  binary
+*.ico  binary
+*.pdf  binary
+*.jar  binary
+*.rar  binary
+*.zip  binary
+
+# 统计 diff 时忽略（防止 PR 里出现大量噪声）
+package-lock.json linguist-generated=true
+dist/**           linguist-generated=true

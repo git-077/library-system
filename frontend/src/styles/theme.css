@@ -1,0 +1,389 @@
+/* ============================================================
+   设计令牌（Design Tokens）
+   暖米色纸张 + 深绿主色 + 金色强调，取自「图书馆藏书卡」的意象：
+   纸的质感、墨绿的封皮、烫金的标签。
+   ============================================================ */
+:root {
+  /* 纸与墨 */
+  --paper: #faf7f1;
+  --paper-2: #f4ece0;
+  --paper-3: #efe6d8;
+  --ink: #1d1c1a;
+  --ink-2: #4b463f;
+  --ink-3: #8a8276;
+  --line: #e5dbc9;
+  --line-soft: #efe7d9;
+  --card: #ffffff;
+
+  /* 森林绿 */
+  --forest: #1f4b3a;
+  --forest-deep: #163a2c;
+  --forest-soft: #2f6b53;
+  --forest-mist: #e8f0ea;
+
+  /* 烫金 */
+  --gold: #e0ad3a;
+  --gold-deep: #c1912a;
+  --gold-soft: #f6e3b4;
+  --gold-wash: #fdf6e4;
+
+  /* 书封配色（按图书 id 取模，稳定不跳色） */
+  --cover-1: #2e6b53;
+  --cover-2: #3c6e9c;
+  --cover-3: #9c7b2e;
+  --cover-4: #6a5b93;
+  --cover-5: #a2544a;
+  --cover-6: #46707a;
+
+  --radius-sm: 8px;
+  --radius: 12px;
+  --radius-lg: 16px;
+  --shadow-sm: 0 1px 2px rgba(31, 75, 58, 0.06);
+  --shadow: 0 6px 20px -12px rgba(31, 75, 58, 0.28);
+  --shadow-lg: 0 18px 46px -24px rgba(31, 75, 58, 0.42);
+
+  /* Element Plus 变量覆盖：让内置组件自动继承本套配色 */
+  --el-color-primary: #1f4b3a;
+  --el-color-primary-light-3: #3f6f5b;
+  --el-color-primary-light-5: #6b9281;
+  --el-color-primary-light-7: #a6bfb4;
+  --el-color-primary-light-8: #c6d6cd;
+  --el-color-primary-light-9: #e8f0ea;
+  --el-color-primary-dark-2: #163a2c;
+
+  --el-color-success: #3e7a5e;
+  --el-color-warning: #c1912a;
+  --el-color-danger: #a2544a;
+  --el-color-info: #8a8276;
+
+  --el-text-color-primary: #1d1c1a;
+  --el-text-color-regular: #4b463f;
+  --el-text-color-secondary: #8a8276;
+  --el-border-color: #e5dbc9;
+  --el-border-color-light: #efe7d9;
+  --el-border-color-lighter: #f4ece0;
+  --el-fill-color-blank: #ffffff;
+  --el-bg-color: #ffffff;
+  --el-bg-color-page: #faf7f1;
+
+  --el-border-radius-base: 8px;
+  --el-border-radius-small: 6px;
+  --el-font-family:
+    'PingFang SC', 'Microsoft YaHei', 'Hiragino Sans GB', system-ui, -apple-system, 'Segoe UI',
+    sans-serif;
+}
+
+/* ============================================================
+   基础
+   ============================================================ */
+* {
+  box-sizing: border-box;
+}
+
+html,
+body,
+#app {
+  height: 100%;
+  margin: 0;
+}
+
+body {
+  background: var(--paper);
+  color: var(--ink);
+  font-family: var(--el-font-family);
+  -webkit-font-smoothing: antialiased;
+  font-size: 14px;
+  line-height: 1.6;
+}
+
+/* 细颗粒纸纹：让米色底不显"塑料"，几乎不可察觉但提升质感 */
+body::before {
+  content: '';
+  position: fixed;
+  inset: 0;
+  pointer-events: none;
+  z-index: 0;
+  opacity: 0.35;
+  background-image: radial-gradient(rgba(31, 75, 58, 0.045) 1px, transparent 1px);
+  background-size: 3px 3px;
+}
+
+#app {
+  position: relative;
+  z-index: 1;
+}
+
+::selection {
+  background: var(--gold-soft);
+  color: var(--forest-deep);
+}
+
+/* 滚动条 */
+::-webkit-scrollbar {
+  width: 10px;
+  height: 10px;
+}
+::-webkit-scrollbar-thumb {
+  background: #d9cdb8;
+  border-radius: 999px;
+  border: 3px solid var(--paper);
+}
+::-webkit-scrollbar-thumb:hover {
+  background: #c3b49b;
+}
+::-webkit-scrollbar-track {
+  background: transparent;
+}
+
+/* ============================================================
+   标题与文字
+   ============================================================ */
+h1,
+h2,
+h3,
+h4 {
+  margin: 0;
+  font-weight: 700;
+  color: var(--ink);
+  letter-spacing: 0.01em;
+}
+
+.display {
+  font-family: Georgia, 'Songti SC', 'Noto Serif SC', serif;
+  letter-spacing: 0.02em;
+}
+
+.eyebrow {
+  font-size: 12px;
+  letter-spacing: 0.18em;
+  text-transform: uppercase;
+  color: var(--ink-3);
+  font-weight: 600;
+}
+
+/* ============================================================
+   通用组件类
+   ============================================================ */
+.panel {
+  background: var(--card);
+  border: 1px solid var(--line);
+  border-radius: var(--radius-lg);
+  box-shadow: var(--shadow-sm);
+}
+
+.section-head {
+  display: flex;
+  align-items: baseline;
+  justify-content: space-between;
+  margin: 34px 0 16px;
+}
+
+.section-title {
+  font-size: 19px;
+  font-weight: 700;
+  color: var(--ink);
+  display: flex;
+  align-items: center;
+  gap: 10px;
+}
+
+.section-title .count {
+  font-size: 13px;
+  font-weight: 500;
+  color: var(--ink-3);
+}
+
+.link-more {
+  font-size: 13px;
+  color: var(--ink-3);
+  cursor: pointer;
+  transition: color 0.18s;
+  text-decoration: none;
+}
+.link-more:hover {
+  color: var(--forest);
+}
+
+/* 金色主按钮（门户侧用） */
+.btn-gold {
+  appearance: none;
+  border: none;
+  background: linear-gradient(180deg, #eec25c, var(--gold));
+  color: #3a2c07;
+  font-weight: 600;
+  font-size: 15px;
+  letter-spacing: 0.08em;
+  padding: 0 30px;
+  height: 42px;
+  border-radius: 8px;
+  cursor: pointer;
+  transition:
+    transform 0.16s,
+    box-shadow 0.16s,
+    filter 0.16s;
+  box-shadow: 0 6px 16px -8px rgba(192, 145, 42, 0.9);
+}
+.btn-gold:hover {
+  filter: brightness(1.04);
+  box-shadow: 0 10px 22px -10px rgba(192, 145, 42, 0.95);
+}
+.btn-gold:active {
+  transform: translateY(1px);
+}
+
+.btn-ghost {
+  appearance: none;
+  background: transparent;
+  border: 1px solid rgba(255, 255, 255, 0.34);
+  color: #f4efe4;
+  padding: 0 16px;
+  height: 36px;
+  border-radius: 999px;
+  cursor: pointer;
+  font-size: 13px;
+  transition:
+    background 0.18s,
+    border-color 0.18s;
+}
+.btn-ghost:hover {
+  background: rgba(255, 255, 255, 0.1);
+  border-color: rgba(255, 255, 255, 0.6);
+}
+
+/* ============================================================
+   Element Plus 细节重塑
+   ============================================================ */
+.el-card {
+  border-radius: var(--radius-lg) !important;
+  border: 1px solid var(--line) !important;
+  box-shadow: var(--shadow-sm) !important;
+}
+.el-card__header {
+  border-bottom: 1px solid var(--line-soft) !important;
+  padding: 16px 20px !important;
+  font-weight: 700;
+  background: #fffdf9;
+  border-radius: var(--radius-lg) var(--radius-lg) 0 0;
+}
+
+.el-button {
+  font-weight: 500;
+  border-radius: var(--radius-sm);
+}
+/* 表格内的操作按钮用文字按钮，避免一行塞三个实体按钮导致换行 */
+.el-button.is-text,
+.el-button.is-link {
+  padding: 4px 7px;
+  height: auto;
+}
+.el-table .el-button + .el-button {
+  margin-left: 2px;
+}
+.el-button--primary {
+  --el-button-bg-color: var(--forest);
+  --el-button-border-color: var(--forest);
+  --el-button-hover-bg-color: var(--forest-soft);
+  --el-button-hover-border-color: var(--forest-soft);
+  --el-button-active-bg-color: var(--forest-deep);
+  box-shadow: 0 4px 12px -8px rgba(31, 75, 58, 0.9);
+}
+.el-button--warning {
+  --el-button-bg-color: var(--gold);
+  --el-button-border-color: var(--gold);
+  --el-button-text-color: #3a2c07;
+  --el-button-hover-bg-color: #eec25c;
+  --el-button-hover-border-color: #eec25c;
+  --el-button-hover-text-color: #3a2c07;
+}
+
+.el-input__wrapper,
+.el-select__wrapper,
+.el-textarea__inner {
+  border-radius: var(--radius-sm) !important;
+  box-shadow: 0 0 0 1px var(--line) inset !important;
+  background: #fff;
+}
+.el-input__wrapper.is-focus,
+.el-select__wrapper.is-focused {
+  box-shadow: 0 0 0 1px var(--forest) inset !important;
+}
+
+/* 表格：去掉厚重的灰头，改成纸张色表头 + 更轻的行分隔 */
+.el-table {
+  --el-table-border-color: var(--line-soft);
+  --el-table-header-bg-color: #fbf7ef;
+  --el-table-row-hover-bg-color: #f8f3e9;
+  font-size: 13.5px;
+}
+.el-table th.el-table__cell {
+  background: #fbf7ef !important;
+  color: var(--ink-2) !important;
+  font-weight: 600;
+  letter-spacing: 0.02em;
+}
+.el-table td.el-table__cell {
+  padding: 11px 0;
+}
+.el-table--striped .el-table__body tr.el-table__row--striped td.el-table__cell {
+  background: #fdfbf6;
+}
+
+/* 标签：药丸形、低饱和 */
+.el-tag {
+  border-radius: 999px;
+  font-weight: 500;
+  border: none;
+  background: var(--forest-mist);
+  color: var(--forest);
+  padding: 0 10px;
+}
+.el-tag--success {
+  background: var(--forest-mist) !important;
+  color: var(--forest) !important;
+}
+.el-tag--info {
+  background: #f0ebe1 !important;
+  color: var(--ink-3) !important;
+}
+.el-tag--danger {
+  background: #f7e7e4 !important;
+  color: #a2544a !important;
+}
+.el-tag--warning {
+  background: var(--gold-wash) !important;
+  color: var(--gold-deep) !important;
+}
+
+.el-pagination {
+  --el-pagination-button-bg-color: transparent;
+  font-weight: 500;
+}
+.el-pagination.is-background .el-pager li.is-active {
+  background: var(--forest) !important;
+  border-radius: 8px;
+}
+
+.el-dialog {
+  border-radius: 18px !important;
+  overflow: hidden;
+  box-shadow: var(--shadow-lg) !important;
+}
+.el-dialog__header {
+  margin-right: 0;
+  padding: 20px 24px 0;
+  font-weight: 700;
+}
+
+.el-message-box {
+  border-radius: 16px !important;
+  border: 1px solid var(--line) !important;
+}
+
+.el-menu-item.is-active {
+  background: rgba(224, 173, 58, 0.14) !important;
+}
+
+/* 空状态 */
+.el-empty__description p {
+  color: var(--ink-3);
+}

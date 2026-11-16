@@ -1,0 +1,40 @@
+import { defineConfig } from 'vite'
+import vue from '@vitejs/plugin-vue'
+
+// 后端地址可通过环境变量覆盖（后端换端口时同步改这个即可）
+const BACKEND = process.env.VITE_PROXY_TARGET || 'http://localhost:8080'
+
+// 本地开发时 /api 代理到后端 8080，避免跨域；
+// 生产环境由 Nginx 完成同样的反向代理
+export default defineConfig({
+  plugins: [vue()],
+  server: {
+    // 同时兼容 http://localhost:5173 与 http://127.0.0.1:5173 两种访问方式
+    host: '0.0.0.0',
+    port: 5173,
+    strictPort: true,
+    proxy: {
+      '/api': {
+        target: BACKEND,
+        changeOrigin: true
+      }
+    }
+  },
+  build: {
+    // 生产构建：按依赖拆包，避免单个 1MB 大包拖慢首屏
+    // vendor 变动频率低，可长期命中浏览器缓存；业务代码单独成块
+    rollupOptions: {
+      output: {
+        manualChunks: {
+          vue: ['vue', 'vue-router', 'pinia'],
+          element: ['element-plus'],
+          axios: ['axios'],
+          // 图表库只在统计页用到，单独成块后可懒加载、长期缓存
+          echarts: ['echarts/core', 'echarts/charts', 'echarts/components', 'echarts/renderers']
+        }
+      }
+    },
+    // 超过 600KB 才提示，避免无意义告警
+    chunkSizeWarningLimit: 600
+  }
+})

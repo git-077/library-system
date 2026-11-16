@@ -1,0 +1,74 @@
+server:
+  # 端口可用环境变量覆盖：若本机 8080 被占用（如 IDEA 内置 Tomcat），
+  # 用 SERVER_PORT=8081 启动，并把前端 vite 代理同步改为 8081
+  port: ${SERVER_PORT:8080}
+
+spring:
+  datasource:
+    driver-class-name: com.mysql.cj.jdbc.Driver
+    # docker-compose 中通过环境变量注入 MYSQL_HOST 等；本地开发使用默认值 localhost/root/root123
+    url: jdbc:mysql://${MYSQL_HOST:localhost}:${MYSQL_PORT:3306}/library_system_db?useUnicode=true&characterEncoding=utf8&serverTimezone=Asia/Shanghai&useSSL=false&allowPublicKeyRetrieval=true
+    username: ${MYSQL_USERNAME:root}
+    # 本地开发默认 123456；docker-compose 通过环境变量覆盖为 root123
+    password: ${MYSQL_PASSWORD:123456}
+  jackson:
+    time-zone: Asia/Shanghai
+    # LocalDateTime 的格式在 JacksonConfig 中统一配置
+    date-format: yyyy-MM-dd HH:mm:ss
+
+mybatis-plus:
+  configuration:
+    map-underscore-to-camel-case: true
+    # 开发期打印 SQL；生产环境设 MYBATIS_LOG_IMPL=org.apache.ibatis.logging.nologging.NoLoggingImpl 关闭
+    log-impl: ${MYBATIS_LOG_IMPL:org.apache.ibatis.logging.stdout.StdOutImpl}
+  global-config:
+    banner: false
+    db-config:
+      # 全局逻辑删除字段：user / book 表的 deleted 字段
+      logic-delete-field: deleted
+      logic-delete-value: 1
+      logic-not-delete-value: 0
+
+library:
+  jwt:
+    # 生产环境务必通过环境变量 JWT_SECRET 覆盖，且长度 >= 32 字符
+    secret: ${JWT_SECRET:dev-secret-key-for-library-system-local-0123456789abcdef}
+    expire-hours: 2
+  borrow:
+    max-count: 5      # 同时在借数量上限
+    days: 30          # 借阅天数
+    max-renew: 1      # 最大续借次数
+  overdue:
+    # 逾期扫描定时任务（每天 01:00）。cron 表达式可用 OVERDUE_CRON 覆盖，
+    # 例：OVERDUE_CRON="0 */10 * * * ?" 改成每 10 分钟扫一次，便于本地演示
+    cron: ${OVERDUE_CRON:0 0 1 * * ?}
+  cors:
+    # 允许跨域的来源，逗号分隔。生产环境用 CORS_ORIGINS 指定真实域名，
+    # 例如 CORS_ORIGINS=https://lib.example.com
+    allowed-origins: ${CORS_ORIGINS:http://localhost:5173,http://127.0.0.1:5173,http://localhost,http://127.0.0.1}
+
+# 接口文档：http://localhost:8080/swagger-ui.html
+springdoc:
+  swagger-ui:
+    path: /swagger-ui.html
+    tags-sorter: alpha
+    operations-sorter: alpha
+  api-docs:
+    path: /v3/api-docs
+
+# 健康检查：Docker healthcheck / 负载均衡 / Prometheus 抓取都靠它
+management:
+  endpoints:
+    web:
+      exposure:
+        # 只暴露必要端点；生产环境建议配合 management.server.port 隔离到内网
+        include: health,info,metrics
+  endpoint:
+    health:
+      show-details: when-authorized
+      probes:
+        enabled: true
+
+logging:
+  level:
+    com.library: info
