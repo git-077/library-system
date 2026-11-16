@@ -91,7 +91,10 @@
       <p>· <b>在借数量</b>指当前尚未归还的借阅记录条数，不含已归还与已逾期归还的记录。</p>
       <p>· <b>逾期数量</b>为在借且当前时间已超过应还时间的记录数，需重点跟进。</p>
       <p>· <b>在馆总库存</b>为全部上架图书的 <code>stock</code> 之和，不含已借出的册数。</p>
-      <p>· <b>借还趋势</b>按 <code>borrow_date</code> / <code>return_date</code> 的自然日聚合，无记录的日期补 0。</p>
+      <p>
+        · <b>借还趋势</b>按 <code>borrow_date</code> /
+        <code>return_date</code> 的自然日聚合，无记录的日期补 0。
+      </p>
     </section>
   </div>
 </template>
@@ -238,9 +241,7 @@ const trendOption = computed(() => {
   }
 })
 
-const totalBooks = computed(() =>
-  categories.value.reduce((sum, c) => sum + (c.bookCount || 0), 0)
-)
+const totalBooks = computed(() => categories.value.reduce((sum, c) => sum + (c.bookCount || 0), 0))
 
 const pieOption = computed(() => ({
   textStyle: BASE_TEXT_STYLE,

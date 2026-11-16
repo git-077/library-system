@@ -10,4 +10,5 @@ export const getBorrowPage = params => request.get('/borrows/page', { params })
 export const checkOverdue = () => request.post('/borrows/overdue-check')
 
 /** 导出借阅记录 CSV（管理员），返回 Blob */
-export const exportBorrows = params => request.get('/borrows/export', { params, responseType: 'blob' })
+export const exportBorrows = params =>
+  request.get('/borrows/export', { params, responseType: 'blob' })
