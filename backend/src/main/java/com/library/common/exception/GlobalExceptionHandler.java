@@ -1,5 +1,6 @@
 package com.library.common.exception;
 
+import com.library.common.log.TraceContext;
 import com.library.common.result.Result;
 import lombok.extern.slf4j.Slf4j;
 import org.springframework.dao.DataIntegrityViolationException;
@@ -56,11 +57,19 @@ public class GlobalExceptionHandler {
         return build(HttpStatus.BAD_REQUEST.value(), "提交的数据不符合要求：字段可能过长或与已有记录冲突");
     }
 
-    /** 兜底异常：不把堆栈细节暴露给前端，只记录日志 */
+    /**
+     * 兜底异常：不把堆栈细节暴露给前端，只记录日志。
+     * <p>消息里带上 traceId——线上用户只会说「刚才保存失败了」，
+     * 拿到这串 id 后 {@code grep <traceId> app.log} 就能捞出这次请求的全部日志
+     * （包括入参、SQL 耗时、堆栈），比问「你几点点的」高效得多。
+     */
     @ExceptionHandler(Exception.class)
     public ResponseEntity<Result<Void>> handleOther(Exception e) {
         log.error("系统异常", e);
-        return build(HttpStatus.INTERNAL_SERVER_ERROR.value(), "系统繁忙，请稍后重试");
+        String traceId = TraceContext.get();
+        String message = traceId == null ? "系统繁忙，请稍后重试"
+                : "系统繁忙，请稍后重试（追踪号 " + traceId + "）";
+        return build(HttpStatus.INTERNAL_SERVER_ERROR.value(), message);
     }
 
     /**

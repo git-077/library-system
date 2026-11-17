@@ -1,5 +1,6 @@
 package com.library.module.borrow.task;
 
+import com.library.common.log.TraceContext;
 import com.library.module.borrow.dto.OverdueCheckVO;
 import com.library.module.borrow.service.BorrowService;
 import lombok.RequiredArgsConstructor;
@@ -29,6 +30,10 @@ public class OverdueCheckTask {
 
     @Scheduled(cron = "${library.overdue.cron:0 0 1 * * ?}")
     public void scan() {
+        // 定时任务没有 HTTP 请求，也就没有过滤器帮忙生成 traceId；
+        // 这里手动开一次，让「逾期扫描」的整段日志（含 Service 内部、SQL 耗时）
+        // 能和其它日志一样按同一串 id 聚合成一次执行
+        TraceContext.beginNew();
         try {
             OverdueCheckVO vo = borrowService.checkOverdue();
             log.info("逾期扫描完成：当前逾期 {} 条，新标记 {} 条，恢复 {} 条{}",
@@ -36,6 +41,8 @@ public class OverdueCheckTask {
                     vo.isNoticeCreated() ? "，已发布公告《" + vo.getNoticeTitle() + "》" : "");
         } catch (Exception e) {
             log.error("逾期扫描失败，本次跳过（不影响业务判定）", e);
+        } finally {
+            TraceContext.clear();
         }
     }
 }

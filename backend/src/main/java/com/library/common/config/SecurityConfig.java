@@ -61,6 +61,8 @@ public class SecurityConfig {
                         .requestMatchers(HttpMethod.OPTIONS).permitAll()
                         // 根路径放行：直接访问 8080 时给出说明，而不是 401/404
                         .requestMatchers("/", "/error").permitAll()
+                        // 上传的封面是公开静态资源（图书卡片要能匿名加载，否则 img 带不上 JWT）
+                        .requestMatchers(HttpMethod.GET, "/uploads/**").permitAll()
                         .requestMatchers("/api/auth/login", "/api/auth/register").permitAll()
                         // 接口文档与健康检查不鉴权（生产环境可用 management.server.port 隔离）
                         .requestMatchers("/swagger-ui.html", "/swagger-ui/**", "/v3/api-docs/**").permitAll()
@@ -98,7 +100,9 @@ public class SecurityConfig {
         config.setAllowedOriginPatterns(origins);
         config.setAllowedMethods(List.of("GET", "POST", "PUT", "DELETE", "PATCH", "OPTIONS"));
         config.setAllowedHeaders(List.of("*"));
-        config.setExposedHeaders(List.of("Authorization"));
+        // 浏览器默认只让前端读到「简单响应头」，X-Trace-Id 必须显式暴露，
+        // 否则跨域环境下前端拿不到追踪号，错误提示里就没法回显
+        config.setExposedHeaders(List.of("Authorization", "X-Trace-Id"));
         config.setAllowCredentials(true);
         // 预检结果缓存 1 小时，减少 OPTIONS 请求
         config.setMaxAge(3600L);

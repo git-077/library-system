@@ -1,5 +1,6 @@
 package com.library.common.security;
 
+import com.library.common.log.TraceContext;
 import io.jsonwebtoken.Claims;
 import jakarta.servlet.FilterChain;
 import jakarta.servlet.ServletException;
@@ -43,6 +44,9 @@ public class JwtAuthenticationFilter extends OncePerRequestFilter {
                 UsernamePasswordAuthenticationToken authentication =
                         new UsernamePasswordAuthenticationToken(loginUser, null, authorities);
                 SecurityContextHolder.getContext().setAuthentication(authentication);
+                // 把操作人写进 MDC：本次请求后续每一行日志（含 SQL、异常堆栈之外的业务日志）
+                // 都会带 userId/username，排障时不必再去审计表里按时间反查「是谁」
+                TraceContext.markUser(loginUser.getUserId(), loginUser.getUsername());
             }
         }
         chain.doFilter(request, response);

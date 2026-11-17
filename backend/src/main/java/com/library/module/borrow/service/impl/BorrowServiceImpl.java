@@ -13,9 +13,15 @@ import com.library.module.book.service.BookService;
 import com.library.module.borrow.dto.OverdueCheckVO;
 import com.library.module.borrow.entity.BorrowRecord;
 import com.library.module.borrow.mapper.BorrowMapper;
+import com.library.module.borrow.service.BorrowQueryService;
 import com.library.module.borrow.service.BorrowService;
+import com.library.module.borrow.service.DueSoonPolicy;
 import com.library.module.notice.entity.Notice;
 import com.library.module.notice.service.NoticeService;
+import com.library.module.notification.NotificationType;
+import com.library.module.notification.service.NotificationService;
+import com.library.module.reservation.entity.Reservation;
+import com.library.module.reservation.service.ReservationService;
 import com.library.module.user.entity.User;
 import com.library.module.user.service.UserService;
 import com.library.common.security.LoginUser;
@@ -26,6 +32,7 @@ import org.springframework.transaction.annotation.Transactional;
 
 import java.time.LocalDate;
 import java.time.LocalDateTime;
+import java.time.format.DateTimeFormatter;
 import java.time.temporal.ChronoUnit;
 import java.util.List;
 import java.util.Map;
@@ -43,10 +50,16 @@ import java.util.stream.Collectors;
 @RequiredArgsConstructor
 public class BorrowServiceImpl extends ServiceImpl<BorrowMapper, BorrowRecord> implements BorrowService {
 
+    /** 站内信正文里的时间格式：精确到分钟，读者不需要秒 */
+    private static final DateTimeFormatter MINUTE = DateTimeFormatter.ofPattern("M月d日 HH:mm");
+
     private final BookService bookService;
     private final BookMapper bookMapper;
     private final UserService userService;
     private final NoticeService noticeService;
+    private final NotificationService notificationService;
+    private final BorrowQueryService borrowQueryService;
+    private final ReservationService reservationService;
 
     @Value("${library.borrow.max-count:5}")
     private int maxCount;
@@ -60,6 +73,10 @@ public class BorrowServiceImpl extends ServiceImpl<BorrowMapper, BorrowRecord> i
     /**
      * 借书事务：校验借阅额度 -> 条件更新库存 -> 写入借阅记录。
      * 任一步失败整体回滚，不会出现「库存已扣但记录缺失」的不一致。
+     *
+     * <p>预约分支：若这位读者手里有该书的「待取书」预约，说明有一份副本已经被
+     * 从 stock 挪进了 held 专门留给他，此时不能走 {@code deductStock}（会把别人能借的副本扣掉），
+     * 而是 {@code lendHeld}：把 held 里的那一份转成 borrowed。
      */
     @Override
     @Transactional(rollbackFor = Exception.class)
@@ -69,29 +86,23 @@ public class BorrowServiceImpl extends ServiceImpl<BorrowMapper, BorrowRecord> i
         if (user == null || user.getStatus() == 0) {
             throw new BizException("账户不可用，请联系管理员");
         }
-        long activeCount = lambdaQuery()
-                .eq(BorrowRecord::getUserId, userId)
-                .eq(BorrowRecord::getStatus, 0)
-                .count();
+        long activeCount = borrowQueryService.countActive(userId);
         if (activeCount >= maxCount) {
             throw new BizException("已达最大可借数量（" + maxCount + " 本），请先归还部分图书");
         }
-        // 逾期未还者禁止再借（逾期按 due_date 判断）
-        Long overdueCount = lambdaQuery()
-                .eq(BorrowRecord::getUserId, userId)
-                .eq(BorrowRecord::getStatus, 0)
-                .lt(BorrowRecord::getDueDate, LocalDateTime.now())
-                .count();
-        if (overdueCount > 0) {
+        // 逾期未还者禁止再借（逾期按 due_date 实时判断，不依赖定时任务刷的标记）
+        if (borrowQueryService.countOverdue(userId) > 0) {
             throw new BizException("存在逾期未还图书，请先归还后再借阅");
         }
-        // 2. 条件扣减库存（乐观思路，受影响行数为 0 即失败）
-        int rows = bookMapper.deductStock(bookId);
+        // 2. 有预约就用锁定的副本，没有才扣可借库存（条件更新，受影响行数为 0 即失败）
+        Reservation ready = reservationService.findReady(userId, bookId);
+        int rows = ready != null ? bookMapper.lendHeld(bookId) : bookMapper.deductStock(bookId);
         if (rows == 0) {
-            throw new BizException("库存不足或图书已下架，借阅失败");
+            throw new BizException(ready != null
+                    ? "为你保留的副本状态异常，请刷新后重试"
+                    : "库存不足或图书已下架，借阅失败");
         }
         // 3. 写入借阅记录
-        Book book = bookService.getById(bookId);
         BorrowRecord record = new BorrowRecord();
         record.setUserId(userId);
         record.setBookId(bookId);
@@ -100,9 +111,19 @@ public class BorrowServiceImpl extends ServiceImpl<BorrowMapper, BorrowRecord> i
         record.setStatus(0);
         record.setRenewCount(0);
         save(record);
+        // 4. 预约转借阅（终态，同时让出 active_flag 唯一约束位）
+        if (ready != null) {
+            reservationService.fulfill(ready.getId());
+        }
     }
 
-    /** 还书事务：更新记录状态 -> 回写库存 */
+    /**
+     * 还书事务：更新记录状态 -> 回写库存 -> 有排队则把副本锁定给队首并发到书通知。
+     *
+     * <p>顺序很重要：副本先回到 stock（可借），再决定是否转给 held（锁定）。
+     * 反过来的话，在「回库」和「锁定」之间会有一瞬间别人能抢先借走，
+     * 队列里的读者就白等一轮。
+     */
     @Override
     @Transactional(rollbackFor = Exception.class)
     public void returnBook(Long recordId, LoginUser operator) {
@@ -127,6 +148,8 @@ public class BorrowServiceImpl extends ServiceImpl<BorrowMapper, BorrowRecord> i
         if (!updated) {
             throw new BizException("归还失败，请重试");
         }
+        // 队列里有人等这本书：把刚回馆的副本锁定给队首，并给他发到书通知
+        reservationService.handOff(record.getBookId());
     }
 
     /** 续借：未逾期、未超续借次数，应还时间顺延一个借期 */
@@ -211,6 +234,49 @@ public class BorrowServiceImpl extends ServiceImpl<BorrowMapper, BorrowRecord> i
             sb.append("等 ").append(overdueList.size()).append(" 本，详见借阅管理。");
         }
         return sb.toString();
+    }
+
+    /**
+     * 到期前提醒：给「还有 N 天内到期」的在借记录逐条发站内信。
+     *
+     * <p>幂等键 = {@code DUE_SOON:借阅ID:应还日期}。为什么把日期也放进 key：
+     * 读者续借后应还日期变了，应该再提醒一次；而同一个应还日期绝不能每天提醒一次，
+     * 否则一本快到期的书会连发 3 条，直接变成骚扰。
+     *
+     * <p>不加事务：每条提醒相互独立，一条失败不该把其它人的提醒一起回滚。
+     */
+    @Override
+    public int sendDueSoonReminders(int aheadDays) {
+        LocalDateTime now = LocalDateTime.now();
+        List<BorrowRecord> dueSoon = lambdaQuery()
+                .eq(BorrowRecord::getStatus, 0)
+                // 已逾期的走催还公告，不在这里重复提醒
+                .ge(BorrowRecord::getDueDate, now)
+                .le(BorrowRecord::getDueDate, now.plusDays(aheadDays))
+                .orderByAsc(BorrowRecord::getDueDate)
+                .list();
+        fillInfo(dueSoon);
+
+        int sent = 0;
+        for (BorrowRecord r : dueSoon) {
+            // 双重保险：SQL 已按窗口过滤，这里再判一次，避免将来改 SQL 时把窗口条件丢掉
+            if (!DueSoonPolicy.inWindow(r.getDueDate(), now, aheadDays)) {
+                continue;
+            }
+            String name = Objects.toString(r.getBookName(), "图书#" + r.getBookId());
+            long remain = DueSoonPolicy.remainDays(r.getDueDate(), now);
+            String title = DueSoonPolicy.title(name, remain);
+            String content = "《" + name + "》应于 " + r.getDueDate().format(MINUTE) + " 前归还"
+                    + (remain <= 0 ? "（今天最后一天）" : "，还剩 " + remain + " 天")
+                    + "。如需继续阅读，可续借 " + maxRenew + " 次（每次 " + borrowDays + " 天）。";
+            boolean ok = notificationService.send(r.getUserId(), NotificationType.DUE_SOON,
+                    title, content, r.getId(),
+                    DueSoonPolicy.dedupeKey(r.getId(), r.getDueDate()));
+            if (ok) {
+                sent++;
+            }
+        }
+        return sent;
     }
 
     private void checkOwner(BorrowRecord record, LoginUser operator) {

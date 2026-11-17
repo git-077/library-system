@@ -42,9 +42,9 @@ class BorrowTransactionIntegrationTest {
 
     @Container
     static final MySQLContainer<?> MYSQL = new MySQLContainer<>("mysql:8.0.33")
-            .withDatabaseName("library_system_db")
-            // 直接用仓库里的建表脚本，测试与生产同源
-            .withInitScript("init.sql");
+            .withDatabaseName("library_system_db");
+    // 建表交给应用启动时的 Flyway：测试跑的就是生产用的那份迁移脚本，
+    // 避免「测试用一份 DDL、线上用另一份」导致测试通过但线上建表失败
 
     @DynamicPropertySource
     static void datasource(DynamicPropertyRegistry registry) {

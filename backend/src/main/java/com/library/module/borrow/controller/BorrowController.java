@@ -11,6 +11,7 @@ import com.library.common.security.LoginUser;
 import com.library.common.security.SecurityUtil;
 import jakarta.servlet.http.HttpServletResponse;
 import lombok.RequiredArgsConstructor;
+import org.springframework.beans.factory.annotation.Value;
 import org.springframework.security.access.prepost.PreAuthorize;
 import org.springframework.web.bind.annotation.*;
 
@@ -21,6 +22,7 @@ import java.time.temporal.ChronoUnit;
 import java.util.ArrayList;
 import java.util.Arrays;
 import java.util.List;
+import java.util.Map;
 
 /**
  * 借阅接口
@@ -33,6 +35,10 @@ import java.util.List;
 public class BorrowController {
 
     private final BorrowService borrowService;
+
+    /** 到期前提醒的默认窗口（天），手动触发时不传参就用它 */
+    @Value("${library.borrow.due-soon-days:3}")
+    private int dueSoonDays;
 
     /** 发起借阅 */
     @PostMapping
@@ -88,6 +94,24 @@ public class BorrowController {
     @Audit(module = "借阅", action = "逾期扫描")
     public Result<OverdueCheckVO> overdueCheck() {
         return Result.ok(borrowService.checkOverdue());
+    }
+
+    /**
+     * 手动触发到期前提醒（管理员，幂等）。
+     *
+     * <p>和定时任务共用同一段逻辑：同一条借阅在同一应还日期只发一次，
+     * 所以补跑或连点都不会重复骚扰读者。
+     *
+     * @param aheadDays 提前多少天，默认取配置里的值（3 天）
+     */
+    @PostMapping("/due-soon-remind")
+    @PreAuthorize("hasRole('ADMIN')")
+    @Audit(module = "借阅", action = "到期提醒")
+    public Result<Map<String, Object>> dueSoonRemind(
+            @RequestParam(required = false) Integer aheadDays) {
+        int days = aheadDays == null || aheadDays <= 0 ? dueSoonDays : aheadDays;
+        int sent = borrowService.sendDueSoonReminders(days);
+        return Result.ok(Map.of("aheadDays", days, "sent", sent));
     }
 
     /**

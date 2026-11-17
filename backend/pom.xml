@@ -57,6 +57,16 @@
       <artifactId>mysql-connector-j</artifactId>
       <scope>runtime</scope>
     </dependency>
+    <!-- Flyway：数据库版本管理。表结构只认 db/migration 下的脚本，
+         MySQL 8 自 Flyway 9 起拆出独立模块，必须显式引入 flyway-mysql -->
+    <dependency>
+      <groupId>org.flywaydb</groupId>
+      <artifactId>flyway-core</artifactId>
+    </dependency>
+    <dependency>
+      <groupId>org.flywaydb</groupId>
+      <artifactId>flyway-mysql</artifactId>
+    </dependency>
     <!-- Lombok -->
     <dependency>
       <groupId>org.projectlombok</groupId>
@@ -80,6 +90,14 @@
       <artifactId>jjwt-jackson</artifactId>
       <version>${jjwt.version}</version>
       <scope>runtime</scope>
+    </dependency>
+
+    <!-- 结构化日志：把一行日志编码成单行 JSON（含 MDC 字段），
+         便于 ELK / Loki / 云厂商日志服务按 traceId 聚合；版本 7.x 对应 Logback 1.4（Spring Boot 3.2） -->
+    <dependency>
+      <groupId>net.logstash.logback</groupId>
+      <artifactId>logstash-logback-encoder</artifactId>
+      <version>7.4</version>
     </dependency>
 
     <!-- 接口文档：Swagger UI（/swagger-ui.html） -->
@@ -120,17 +138,11 @@
   </dependencies>
 
   <build>
-    <!-- 把仓库根目录的 sql/init.sql 复制到测试类路径，
-         集成测试用它与生产完全一致的建表脚本初始化容器，避免 DDL 漂移 -->
+    <!-- 测试类路径只包含 src/test/resources；
+         集成测试的建表由应用启动时的 Flyway 完成，与生产用同一份迁移脚本 -->
     <testResources>
       <testResource>
         <directory>src/test/resources</directory>
-      </testResource>
-      <testResource>
-        <directory>../sql</directory>
-        <includes>
-          <include>init.sql</include>
-        </includes>
       </testResource>
     </testResources>
     <plugins>

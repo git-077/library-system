@@ -4,6 +4,7 @@ import com.fasterxml.jackson.databind.ObjectMapper;
 import com.library.common.log.Audit;
 import com.library.common.security.LoginUser;
 import com.library.common.security.SecurityUtil;
+import com.library.common.util.IpUtil;
 import com.library.module.log.entity.OperationLog;
 import com.library.module.log.service.OperationLogService;
 import jakarta.servlet.http.HttpServletRequest;
@@ -132,17 +133,9 @@ public class OperationLogAspect {
         return null;
     }
 
-    /** 取真实客户端 IP：经过 Nginx 反代时 remoteAddr 是本机，需优先读 X-Forwarded-For */
+    /** 取真实客户端 IP（与登录限流共用同一套解析，避免两处口径不一致） */
     private String clientIp(HttpServletRequest request) {
-        String forwarded = request.getHeader("X-Forwarded-For");
-        if (forwarded != null && !forwarded.isBlank()) {
-            return truncate(forwarded.split(",")[0].trim(), 60);
-        }
-        String realIp = request.getHeader("X-Real-IP");
-        if (realIp != null && !realIp.isBlank()) {
-            return truncate(realIp, 60);
-        }
-        return truncate(request.getRemoteAddr(), 60);
+        return truncate(IpUtil.getClientIp(request), 60);
     }
 
     private String truncate(String value, int max) {

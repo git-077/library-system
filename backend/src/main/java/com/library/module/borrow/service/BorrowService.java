@@ -32,6 +32,14 @@ public interface BorrowService extends IService<BorrowRecord> {
     OverdueCheckVO checkOverdue();
 
     /**
+     * 到期前提醒：给「还有 N 天内到期」的在借记录逐条发站内信。
+     *
+     * <p>返回新增的提醒条数（命中幂等的会跳过，所以通常第二次调用返回 0）。
+     * 由 {@code DueReminderTask} 每日调用。
+     */
+    int sendDueSoonReminders(int aheadDays);
+
+    /**
      * 导出用全量记录（按 id 升序，含书名与借阅人用户名冗余字段）。
      *
      * @param status 0 在借 / 1 已还 / null 全部

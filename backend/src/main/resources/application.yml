@@ -4,17 +4,38 @@ server:
   port: ${SERVER_PORT:8080}
 
 spring:
+  application:
+    # 出现在日志的 app 字段与 actuator /actuator/info 里，便于在共享日志平台区分服务
+    name: library-backend
   datasource:
     driver-class-name: com.mysql.cj.jdbc.Driver
-    # docker-compose 中通过环境变量注入 MYSQL_HOST 等；本地开发使用默认值 localhost/root/root123
-    url: jdbc:mysql://${MYSQL_HOST:localhost}:${MYSQL_PORT:3306}/library_system_db?useUnicode=true&characterEncoding=utf8&serverTimezone=Asia/Shanghai&useSSL=false&allowPublicKeyRetrieval=true
+    # docker-compose 中通过环境变量注入 MYSQL_HOST 等；本地开发使用默认值 localhost/root/123456
+    # createDatabaseIfNotExist=true：库不存在时自动创建，配合 Flyway 让「空机器一条命令就能起」
+    url: jdbc:mysql://${MYSQL_HOST:localhost}:${MYSQL_PORT:3306}/library_system_db?useUnicode=true&characterEncoding=utf8&serverTimezone=Asia/Shanghai&useSSL=false&allowPublicKeyRetrieval=true&createDatabaseIfNotExist=true
     username: ${MYSQL_USERNAME:root}
     # 本地开发默认 123456；docker-compose 通过环境变量覆盖为 root123
     password: ${MYSQL_PASSWORD:123456}
+  # 表结构由 Flyway 管理：启动时自动执行 classpath:db/migration 下的 Vn__xxx.sql
+  # baseline-on-migrate + baseline-version=0：兼容已经用旧版 sql/init.sql 建过表的环境，
+  # 首次接管时把现有库标记为「版本 0 的基线」，随后 V1/V2 因均为幂等脚本而安全跳过重复建表
+  flyway:
+    enabled: true
+    locations: classpath:db/migration
+    baseline-on-migrate: true
+    baseline-version: 0
+    baseline-description: "已存在的库（init.sql 时代）"
+    # 生产环境禁止 flyway clean，避免误删整库
+    clean-disabled: true
   jackson:
     time-zone: Asia/Shanghai
     # LocalDateTime 的格式在 JacksonConfig 中统一配置
     date-format: yyyy-MM-dd HH:mm:ss
+  servlet:
+    multipart:
+      # 业务层对封面的限制更严（2MB），这里放宽到 5MB 只是给批处理留余量，
+      # 超限时由 MultipartException 转成 400，不会抛 500
+      max-file-size: 5MB
+      max-request-size: 10MB
 
 mybatis-plus:
   configuration:
@@ -38,6 +59,31 @@ library:
     max-count: 5      # 同时在借数量上限
     days: 30          # 借阅天数
     max-renew: 1      # 最大续借次数
+    # 到期前提醒窗口（天）：在借且剩余天数 <= 该值时发一条站内信
+    due-soon-days: ${DUE_SOON_DAYS:3}
+    # 提醒任务执行时间（每天 09:00，上班第一件事就能看到）
+    due-soon-cron: ${DUE_SOON_CRON:0 0 9 * * ?}
+  reservation:
+    # 到馆后为读者保留的天数，超时未取自动顺延给下一位
+    hold-days: ${RESERVATION_HOLD_DAYS:7}
+    # 同时进行中的预约上限（排队中 + 待取书）
+    max-count: ${RESERVATION_MAX_COUNT:3}
+    # 过期清扫频率：默认每小时第 5 分钟，保留期不会因为一天一扫而白等近一天
+    sweep-cron: ${RESERVATION_SWEEP_CRON:0 5 * * * ?}
+  security:
+    login:
+      # 同一账号连续失败次数上限，达到后锁定
+      max-fail: 5
+      # 锁定时长（分钟）
+      lock-minutes: 15
+      # 同一 IP 每分钟允许的登录请求数（防撞库脚本换账号刷）
+      ip-max-per-minute: 20
+  upload:
+    # 上传目录，相对路径以「启动时的工作目录」为基准（mvn spring-boot:run 即 backend/）
+    # 生产环境用 UPLOAD_DIR 指到宿主机挂载卷，例如 /data/library/uploads
+    dir: ${UPLOAD_DIR:./uploads}
+    # 封面大小上限（字节），默认 2MB
+    cover-max-size: 2097152
   overdue:
     # 逾期扫描定时任务（每天 01:00）。cron 表达式可用 OVERDUE_CRON 覆盖，
     # 例：OVERDUE_CRON="0 */10 * * * ?" 改成每 10 分钟扫一次，便于本地演示
@@ -69,6 +115,12 @@ management:
       probes:
         enabled: true
 
+# 日志：格式与输出位置由 logback-spring.xml 决定（dev 彩色文本 / prod 单行 JSON）
+# 这里只放「可调参数」，容器部署时用环境变量覆盖
 logging:
   level:
-    com.library: info
+    # 排查问题临时放开：LOG_LEVEL=debug，不必重新打包
+    com.library: ${LOG_LEVEL:info}
+    root: ${ROOT_LOG_LEVEL:info}
+  # prod profile 下 JSON 日志的落盘目录；容器里建议挂载到卷，避免重建容器丢日志
+  log-dir: ${LOG_DIR:./logs}
