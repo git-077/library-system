@@ -83,10 +83,24 @@
 
     <div class="book-grid" v-loading="loading">
       <article v-for="b in list" :key="b.id" class="book-card">
-        <div class="cover" :style="{ background: coverColor(b.id) }">
+        <div
+          class="cover"
+          :class="{ 'has-cover': !!b.coverUrl }"
+          :style="b.coverUrl ? null : { background: coverColor(b.id) }"
+        >
+          <img
+            v-if="b.coverUrl"
+            class="cover-img"
+            :src="b.coverUrl"
+            :alt="`${b.name} 封面`"
+            loading="lazy"
+            @error="b.coverUrl = ''"
+          />
           <span class="spine" aria-hidden="true"></span>
-          <span class="cover-title">{{ b.name }}</span>
-          <span class="cover-isbn">{{ b.isbn }}</span>
+          <template v-if="!b.coverUrl">
+            <span class="cover-title">{{ b.name }}</span>
+            <span class="cover-isbn">{{ b.isbn }}</span>
+          </template>
           <span v-if="b.stock <= 0" class="cover-flag">已借完</span>
         </div>
 
@@ -127,9 +141,20 @@
     <!-- ================= 详情 ================= -->
     <el-dialog v-model="detailVisible" width="620px" title="图书详情" class="detail-dialog">
       <div v-if="current" class="detail">
-        <div class="detail-cover" :style="{ background: coverColor(current.id) }">
+        <div
+          class="detail-cover"
+          :class="{ 'has-cover': !!current.coverUrl }"
+          :style="current.coverUrl ? null : { background: coverColor(current.id) }"
+        >
+          <img
+            v-if="current.coverUrl"
+            class="cover-img"
+            :src="current.coverUrl"
+            :alt="`${current.name} 封面`"
+            @error="current.coverUrl = ''"
+          />
           <span class="spine" aria-hidden="true"></span>
-          <span class="cover-title">{{ current.name }}</span>
+          <span v-if="!current.coverUrl" class="cover-title">{{ current.name }}</span>
         </div>
 
         <div class="detail-info">
@@ -160,19 +185,47 @@
                 {{ (current.stock || 0) + (current.borrowed || 0) }} 册
               </dd>
             </div>
+            <div v-if="reso.waitingCount > 0 || reso.readyCount > 0">
+              <dt>预约</dt>
+              <dd>
+                {{ reso.waitingCount }} 人排队<template v-if="reso.readyCount > 0"
+                  >，{{ reso.readyCount }} 人待取书</template
+                >
+              </dd>
+            </div>
           </dl>
 
           <p class="detail-desc">{{ current.description || '暂无简介。' }}</p>
 
           <div class="detail-actions">
+            <!-- 可借：直接借；待取书：锁定给他的副本已备好，也能借 -->
+            <button v-if="canBorrow" class="btn-gold" @click="handleBorrow(current)">借 阅</button>
+
+            <!-- 已借完且未预约：走排队 -->
             <button
+              v-else-if="current.status === 1 && reso.myStatus === null"
               class="btn-gold"
-              :disabled="current.status !== 1 || current.stock <= 0"
-              :class="{ disabled: current.status !== 1 || current.stock <= 0 }"
-              @click="handleBorrow(current)"
+              :disabled="reserving"
+              @click="handleReserve(current)"
             >
-              {{ current.stock <= 0 ? '暂无库存' : '借 阅' }}
+              预约排队{{ reso.waitingCount > 0 ? `（前方 ${reso.waitingCount} 人）` : '' }}
             </button>
+
+            <!-- 排队中 -->
+            <template v-else-if="reso.myStatus === 0">
+              <span class="reso-state">
+                排队中 · 第 <b>{{ reso.myPosition }}</b> 位
+              </span>
+              <el-button plain @click="handleCancelReserve">取消预约</el-button>
+            </template>
+
+            <!-- 待取书但已过保留期（部分极端时序下 reserved 副本刚被回收） -->
+            <span v-else-if="reso.myStatus === 1" class="reso-state ok">
+              已到馆，保留至 {{ (reso.myExpireTime || '').slice(0, 10) }}
+            </span>
+
+            <span v-else-if="current.status !== 1" class="reso-state">已下架，暂不可借阅</span>
+
             <el-button plain @click="handleFavorite(current)">加入收藏</el-button>
           </div>
         </div>
@@ -189,6 +242,7 @@ import { listCategories } from '../api/category'
 import { getPortalOverview } from '../api/portal'
 import { borrowBook } from '../api/borrow'
 import { addFavorite } from '../api/favorite'
+import { getBookReservation, reserveBook, cancelReservation } from '../api/reservation'
 
 const query = reactive({ pageNum: 1, pageSize: 12, keyword: '', categoryId: null })
 const list = ref([])
@@ -199,6 +253,26 @@ const loading = ref(false)
 const catLoading = ref(false)
 const detailVisible = ref(false)
 const current = ref(null)
+
+// 当前详情页对应书的预约态：排队人数 + 我的状态（null 表示未预约）
+const reso = reactive({
+  waitingCount: 0,
+  readyCount: 0,
+  myStatus: null,
+  myReservationId: null,
+  myPosition: null,
+  myExpireTime: null,
+  holdDays: 7
+})
+const reserving = ref(false)
+
+/**
+ * 能不能直接借：上架 &（有可借库存 或 有锁定给我的待取副本）。
+ * 第二种情况的 stock 是 0（副本被挪进了 held），只看 stock 会让预约者以为借不了。
+ */
+const canBorrow = computed(
+  () => current.value?.status === 1 && (current.value?.stock > 0 || reso.myStatus === 1)
+)
 
 // 检索态：有关键字或选了分类
 const isSearching = computed(() => !!query.keyword || !!query.categoryId)
@@ -256,6 +330,48 @@ function clearAll() {
 function openDetail(book) {
   current.value = book
   detailVisible.value = true
+  loadReservation(book.id)
+}
+
+async function loadReservation(bookId) {
+  Object.assign(reso, {
+    waitingCount: 0,
+    readyCount: 0,
+    myStatus: null,
+    myReservationId: null,
+    myPosition: null,
+    myExpireTime: null
+  })
+  try {
+    const res = await getBookReservation(bookId)
+    Object.assign(reso, res.data || {})
+  } catch {
+    /* 预约态是增强信息，拿不到也不该让详情页打不开 */
+  }
+}
+
+async function handleReserve(book) {
+  reserving.value = true
+  try {
+    await ElMessageBox.confirm(
+      `《${book.name}》当前已全部借出。预约后将进入队列，有副本归还时会给你发到馆通知，` +
+        `到馆后保留 ${reso.holdDays || 7} 天。`,
+      '预约确认',
+      { confirmButtonText: '确认预约', cancelButtonText: '再等等' }
+    )
+    await reserveBook(book.id)
+    ElMessage.success('预约成功，到馆后会通知你')
+    await loadReservation(book.id)
+  } finally {
+    reserving.value = false
+  }
+}
+
+async function handleCancelReserve() {
+  await ElMessageBox.confirm('确定取消这次预约吗？排队位置不会保留。', '取消预约')
+  await cancelReservation(reso.myReservationId)
+  ElMessage.success('已取消预约')
+  await loadReservation(current.value.id)
 }
 
 async function handleBorrow(book) {
@@ -493,13 +609,31 @@ onMounted(() => {
 
 .cover {
   position: relative;
-  aspect-ratio: 3 / 3.5;
+  /* 3:4 是出版物常用开本，也让真实封面图无需裁切即可完整展示 */
+  aspect-ratio: 3 / 4;
   display: flex;
   flex-direction: column;
   align-items: center;
   justify-content: center;
   padding: 16px 14px;
   overflow: hidden;
+  background: #22332c;
+}
+/* 真实封面：铺满并按顶端对齐裁切，底部留白自然被裁掉 */
+.cover-img {
+  position: absolute;
+  inset: 0;
+  width: 100%;
+  height: 100%;
+  object-fit: cover;
+  object-position: center top;
+  display: block;
+}
+.cover.has-cover {
+  padding: 0;
+}
+.cover.has-cover .spine {
+  background: linear-gradient(90deg, rgba(0, 0, 0, 0.4), rgba(0, 0, 0, 0));
 }
 /* 书脊：左侧一道暗色 + 金色细线 */
 .spine {
@@ -636,6 +770,9 @@ onMounted(() => {
   overflow: hidden;
   box-shadow: 0 14px 28px -18px rgba(0, 0, 0, 0.6);
 }
+.detail-cover.has-cover {
+  padding: 0;
+}
 
 .detail-info {
   flex: 1;
@@ -684,12 +821,34 @@ onMounted(() => {
 .detail-actions {
   display: flex;
   gap: 10px;
+  align-items: center;
+  flex-wrap: wrap;
 }
 .btn-gold.disabled {
   background: #e8e0d2;
   color: #a79c8a;
   box-shadow: none;
   cursor: not-allowed;
+}
+
+/* 预约态说明文字：比按钮弱一级，不抢主操作 */
+.reso-state {
+  font-size: 12.5px;
+  color: var(--ink-3);
+  padding: 6px 12px;
+  border-radius: 8px;
+  background: var(--paper-2);
+  border: 1px dashed var(--line);
+}
+.reso-state b {
+  color: var(--forest);
+  font-size: 13.5px;
+}
+.reso-state.ok {
+  color: var(--forest);
+  background: #f2f8f4;
+  border-color: #cfe3d7;
+  border-style: solid;
 }
 
 @media (max-width: 720px) {

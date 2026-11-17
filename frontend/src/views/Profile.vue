@@ -34,9 +34,20 @@
         借阅记录
         <span class="n">{{ borrowTotal }}</span>
       </button>
+      <button :class="{ on: activeTab === 'reservations' }" @click="activeTab = 'reservations'">
+        我的预约
+        <span class="n">{{ activeReservations }}</span>
+      </button>
+      <button :class="{ on: activeTab === 'notifications' }" @click="activeTab = 'notifications'">
+        消息通知
+        <span class="n" :class="{ hot: unreadCount > 0 }">{{ unreadCount }}</span>
+      </button>
       <button :class="{ on: activeTab === 'favorites' }" @click="activeTab = 'favorites'">
         我的收藏
         <span class="n">{{ favList.length }}</span>
+      </button>
+      <button :class="{ on: activeTab === 'security' }" @click="activeTab = 'security'">
+        账户安全
       </button>
     </div>
 
@@ -95,13 +106,149 @@
       </div>
     </section>
 
+    <!-- 我的预约 -->
+    <section v-show="activeTab === 'reservations'" class="panel body">
+      <el-table :data="resoList" v-loading="resoLoading" stripe>
+        <el-table-column label="书名" min-width="200">
+          <template #default="{ row }">
+            <div class="reso-book">
+              <span
+                class="reso-cover"
+                :style="row.coverUrl ? null : { background: coverColor(row.bookId) }"
+              >
+                <img v-if="row.coverUrl" :src="row.coverUrl" alt="" />
+                <i v-else>{{ (row.bookName || '?').charAt(0) }}</i>
+              </span>
+              <span class="reso-text">
+                <b class="book-cell">{{ row.bookName || `图书#${row.bookId}` }}</b>
+                <em>{{ row.bookAuthor || '佚名' }}</em>
+              </span>
+            </div>
+          </template>
+        </el-table-column>
+
+        <el-table-column label="状态" width="104">
+          <template #default="{ row }">
+            <el-tag :type="resoTagType(row.status)" size="small">{{ resoText(row.status) }}</el-tag>
+          </template>
+        </el-table-column>
+
+        <el-table-column label="进度" width="184">
+          <template #default="{ row }">
+            <span v-if="row.status === 0" class="queue-pos"
+              >第 <b>{{ row.position }}</b> 位</span
+            >
+            <span v-else-if="row.status === 1" class="ok-text">
+              保留至 {{ (row.expireTime || '').slice(0, 10) }}
+            </span>
+            <span v-else class="muted">—</span>
+          </template>
+        </el-table-column>
+
+        <el-table-column prop="createTime" label="预约时间" width="170">
+          <template #default="{ row }">{{ prettyTime(row.createTime) }}</template>
+        </el-table-column>
+
+        <el-table-column label="操作" width="176" fixed="right">
+          <template #default="{ row }">
+            <template v-if="row.status === 1">
+              <el-button type="primary" size="small" @click="handleTakeReserved(row)"
+                >立即借阅</el-button
+              >
+              <el-button size="small" plain @click="handleCancelReso(row)">取消</el-button>
+            </template>
+            <el-button
+              v-else-if="row.status === 0"
+              size="small"
+              plain
+              @click="handleCancelReso(row)"
+            >
+              取消预约
+            </el-button>
+            <span v-else class="muted">—</span>
+          </template>
+        </el-table-column>
+      </el-table>
+
+      <el-empty
+        v-if="!resoLoading && resoList.length === 0"
+        description="没有进行中的预约。馆藏全部借完的书可以预约排队，到馆后会自动通知你"
+      />
+    </section>
+
+    <!-- 消息通知 -->
+    <section v-show="activeTab === 'notifications'" class="panel body">
+      <div class="note-toolbar">
+        <span>
+          共 <b>{{ noteTotal }}</b> 条，其中
+          <b :class="{ warn: unreadCount > 0 }">{{ unreadCount }}</b> 条未读
+        </span>
+        <el-button size="small" text :disabled="unreadCount === 0" @click="handleReadAllNotes">
+          全部标为已读
+        </el-button>
+      </div>
+
+      <div class="note-list" v-loading="noteLoading">
+        <article
+          v-for="n in noteList"
+          :key="n.id"
+          class="note-item"
+          :class="{ unread: n.isRead === 0 }"
+          @click="handleReadNote(n)"
+        >
+          <span class="note-dot" :class="noteDot(n.type)"></span>
+          <div class="note-main">
+            <div class="note-head">
+              <b>{{ n.title }}</b>
+              <time>{{ prettyTime(n.createTime) }}</time>
+            </div>
+            <p>{{ n.content }}</p>
+          </div>
+          <span v-if="n.isRead === 0" class="note-flag">未读</span>
+        </article>
+      </div>
+
+      <el-empty
+        v-if="!noteLoading && noteList.length === 0"
+        description="暂无消息。预约到书、借阅到期前，都会在这里提醒你"
+      />
+
+      <div class="pager" v-if="noteTotal > noteQuery.pageSize">
+        <el-pagination
+          background
+          layout="prev, pager, next"
+          :total="noteTotal"
+          :current-page="noteQuery.pageNum"
+          :page-size="noteQuery.pageSize"
+          @current-change="
+            p => {
+              noteQuery.pageNum = p
+              loadNotes()
+            }
+          "
+        />
+      </div>
+    </section>
+
     <!-- 收藏 -->
     <section v-show="activeTab === 'favorites'" class="panel body">
       <div class="fav-grid" v-loading="favLoading">
         <article v-for="b in favList" :key="b.id" class="fav-card">
-          <div class="fav-cover" :style="{ background: coverColor(b.id) }">
+          <div
+            class="fav-cover"
+            :class="{ 'has-cover': !!b.coverUrl }"
+            :style="b.coverUrl ? null : { background: coverColor(b.id) }"
+          >
+            <img
+              v-if="b.coverUrl"
+              class="fav-cover-img"
+              :src="b.coverUrl"
+              :alt="`${b.name} 封面`"
+              loading="lazy"
+              @error="b.coverUrl = ''"
+            />
             <span class="spine" aria-hidden="true"></span>
-            <span class="fav-title">{{ b.name }}</span>
+            <span v-if="!b.coverUrl" class="fav-title">{{ b.name }}</span>
           </div>
           <div class="fav-info">
             <h3 :title="b.name">{{ b.name }}</h3>
@@ -126,20 +273,86 @@
         description="暂无收藏，去馆藏检索页收藏感兴趣的图书吧"
       />
     </section>
+
+    <!-- 账户安全：自助修改密码 -->
+    <section v-show="activeTab === 'security'" class="panel body">
+      <div class="pwd-wrap">
+        <div class="pwd-head">
+          <h3>修改登录密码</h3>
+          <p>修改后当前登录仍然有效，下次登录请使用新密码。如果忘记原密码，可联系管理员重置。</p>
+        </div>
+
+        <el-form
+          ref="pwdFormRef"
+          :model="pwdForm"
+          :rules="pwdRules"
+          label-width="100px"
+          class="pwd-form"
+        >
+          <el-form-item label="原密码" prop="oldPassword">
+            <el-input
+              v-model="pwdForm.oldPassword"
+              type="password"
+              show-password
+              autocomplete="current-password"
+              placeholder="请输入当前登录密码"
+            />
+          </el-form-item>
+          <el-form-item label="新密码" prop="newPassword">
+            <el-input
+              v-model="pwdForm.newPassword"
+              type="password"
+              show-password
+              autocomplete="new-password"
+              placeholder="6-32 位，建议字母与数字组合"
+            />
+          </el-form-item>
+          <el-form-item label="确认新密码" prop="confirmPassword">
+            <el-input
+              v-model="pwdForm.confirmPassword"
+              type="password"
+              show-password
+              autocomplete="new-password"
+              placeholder="再输入一次新密码"
+            />
+          </el-form-item>
+          <el-form-item>
+            <el-button type="primary" :loading="pwdSaving" @click="handleChangePassword">
+              保存新密码
+            </el-button>
+            <el-button text @click="resetPwdForm">重置</el-button>
+          </el-form-item>
+        </el-form>
+      </div>
+    </section>
   </div>
 </template>
 
 <script setup>
-import { ref, reactive, computed, onMounted } from 'vue'
+import { ref, reactive, computed, onMounted, watch } from 'vue'
+import { useRoute } from 'vue-router'
 import { ElMessage, ElMessageBox } from 'element-plus'
-import { getMe } from '../api/auth'
+import { getMe, changePassword } from '../api/auth'
 import { getMyBorrows, borrowBook, returnBook, renewBook } from '../api/borrow'
 import { getMyFavorites, removeFavorite } from '../api/favorite'
+import { getMyReservations, cancelReservation } from '../api/reservation'
+import {
+  getNotificationPage,
+  getUnreadCount,
+  markNotificationRead,
+  markAllNotificationsRead
+} from '../api/notification'
 import { useUserStore } from '../stores/user'
 import { borrowStatus, borrowStatusType } from '../utils'
 
 const store = useUserStore()
-const activeTab = ref('borrows')
+const route = useRoute()
+
+const TABS = ['borrows', 'reservations', 'notifications', 'favorites', 'security']
+/** 支持从铃铛通知直接跳到某个标签：/profile?tab=reservations */
+const initialTab = TABS.includes(route.query.tab) ? route.query.tab : 'borrows'
+const activeTab = ref(initialTab)
+
 const me = ref({})
 
 const borrowQuery = reactive({ pageNum: 1, pageSize: 10 })
@@ -151,6 +364,149 @@ const favList = ref([])
 const favLoading = ref(false)
 
 const stats = reactive({ borrowing: 0, overdue: 0, favorites: 0 })
+
+// ---------------- 我的预约 ----------------
+const resoList = ref([])
+const resoLoading = ref(false)
+const activeReservations = computed(
+  () => resoList.value.filter(r => r.status === 0 || r.status === 1).length
+)
+
+const RESO_TEXT = { 0: '排队中', 1: '待取书', 2: '已取消', 3: '已过期', 4: '已借出' }
+const RESO_TAG = { 0: 'warning', 1: 'success', 2: 'info', 3: 'info', 4: 'info' }
+const resoText = s => RESO_TEXT[s] ?? '未知'
+const resoTagType = s => RESO_TAG[s] ?? 'info'
+
+/** 后端 LocalDateTime 序列化成 ISO（含 T），列表里只留到分钟 */
+const prettyTime = v => (v ? String(v).replace('T', ' ').slice(0, 16) : '—')
+
+async function loadReservations() {
+  resoLoading.value = true
+  try {
+    const res = await getMyReservations()
+    resoList.value = res.data || []
+  } finally {
+    resoLoading.value = false
+  }
+}
+
+async function handleCancelReso(row) {
+  await ElMessageBox.confirm(`确定取消《${row.bookName}》的预约吗？排队位置不会保留。`, '取消预约')
+  await cancelReservation(row.id)
+  ElMessage.success('已取消预约')
+  loadReservations()
+}
+
+/** 待取书的副本已经锁定给他，直接借即可（后端走 held 转借出，不占可借库存） */
+async function handleTakeReserved(row) {
+  await ElMessageBox.confirm(
+    `确定借阅《${row.bookName}》吗？为你保留的副本已备好，请在保留期内取书。`,
+    '确认借阅'
+  )
+  await borrowBook(row.bookId)
+  ElMessage.success('借阅成功，请按时归还')
+  loadReservations()
+  loadBorrows()
+  loadStats()
+}
+
+// ---------------- 消息通知 ----------------
+const noteQuery = reactive({ pageNum: 1, pageSize: 10 })
+const noteList = ref([])
+const noteTotal = ref(0)
+const noteLoading = ref(false)
+const unreadCount = ref(0)
+
+/** 类型 → 圆点配色：到期提醒（金）/ 到书（绿）/ 过期（红） */
+function noteDot(type) {
+  if (type === 'RESERVATION_READY') return 'ok'
+  if (type === 'RESERVATION_EXPIRED') return 'bad'
+  return 'warn'
+}
+
+async function loadNotes() {
+  noteLoading.value = true
+  try {
+    const res = await getNotificationPage(noteQuery)
+    noteList.value = res.data.records || []
+    noteTotal.value = Number(res.data.total || 0)
+    const c = await getUnreadCount()
+    unreadCount.value = Number(c.data?.count || 0)
+  } finally {
+    noteLoading.value = false
+  }
+}
+
+async function handleReadNote(n) {
+  if (n.isRead !== 0) return
+  await markNotificationRead(n.id)
+  n.isRead = 1
+  unreadCount.value = Math.max(0, unreadCount.value - 1)
+}
+
+async function handleReadAllNotes() {
+  await markAllNotificationsRead()
+  noteList.value.forEach(n => (n.isRead = 1))
+  unreadCount.value = 0
+  ElMessage.success('已全部标为已读')
+}
+
+// ---------------- 账户安全：自助改密 ----------------
+const pwdFormRef = ref()
+const pwdSaving = ref(false)
+const pwdForm = reactive({ oldPassword: '', newPassword: '', confirmPassword: '' })
+
+const pwdRules = {
+  oldPassword: [{ required: true, message: '请输入原密码', trigger: 'blur' }],
+  newPassword: [
+    { required: true, message: '请输入新密码', trigger: 'blur' },
+    { min: 6, max: 32, message: '新密码长度需为 6-32 位', trigger: 'blur' },
+    {
+      // 前后端都拦一次：后端是最终防线，前端校验只为少一次往返
+      validator: (rule, value, callback) =>
+        value && value === pwdForm.oldPassword
+          ? callback(new Error('新密码不能与原密码相同'))
+          : callback(),
+      trigger: 'blur'
+    }
+  ],
+  confirmPassword: [
+    { required: true, message: '请再次输入新密码', trigger: 'blur' },
+    {
+      validator: (rule, value, callback) =>
+        value !== pwdForm.newPassword ? callback(new Error('两次输入的新密码不一致')) : callback(),
+      trigger: 'blur'
+    }
+  ]
+}
+
+function resetPwdForm() {
+  pwdForm.oldPassword = ''
+  pwdForm.newPassword = ''
+  pwdForm.confirmPassword = ''
+  pwdFormRef.value?.clearValidate()
+}
+
+async function handleChangePassword() {
+  if (!pwdFormRef.value) {
+    return
+  }
+  const valid = await pwdFormRef.value.validate().catch(() => false)
+  if (!valid) {
+    return
+  }
+  pwdSaving.value = true
+  try {
+    await changePassword({
+      oldPassword: pwdForm.oldPassword,
+      newPassword: pwdForm.newPassword
+    })
+    ElMessage.success('密码修改成功，下次登录请使用新密码')
+    resetPwdForm()
+  } finally {
+    pwdSaving.value = false
+  }
+}
 
 const statusText = borrowStatus
 const statusType = borrowStatusType
@@ -244,7 +600,17 @@ onMounted(() => {
   loadBorrows()
   loadStats()
   loadFavorites()
+  loadReservations()
+  loadNotes()
 })
+
+// 铃铛里点某条通知会带 ?tab= 过来；同一个组件内切标签不会重新 mount，得监听 query
+watch(
+  () => route.query.tab,
+  tab => {
+    if (TABS.includes(tab)) activeTab.value = tab
+  }
+)
 </script>
 
 <style scoped>
@@ -379,6 +745,10 @@ onMounted(() => {
   border-radius: 999px;
   padding: 1px 7px;
 }
+.switcher .n.hot {
+  color: #fff;
+  background: #b4553f;
+}
 
 .body {
   padding: 8px 18px 16px;
@@ -399,6 +769,166 @@ onMounted(() => {
   display: flex;
   justify-content: flex-end;
   padding: 14px 0 4px;
+}
+
+/* ---------------- 我的预约 ---------------- */
+.reso-book {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+}
+.reso-cover {
+  width: 30px;
+  height: 40px;
+  flex: none;
+  border-radius: 3px;
+  overflow: hidden;
+  display: grid;
+  place-items: center;
+  background: #2e6b53;
+}
+.reso-cover img {
+  width: 100%;
+  height: 100%;
+  object-fit: cover;
+  object-position: center top;
+  display: block;
+}
+.reso-cover i {
+  font-style: normal;
+  font-size: 12px;
+  color: #f6f1e4;
+  opacity: 0.85;
+}
+.reso-text {
+  display: flex;
+  flex-direction: column;
+  gap: 2px;
+  min-width: 0;
+}
+.reso-text em {
+  font-style: normal;
+  font-size: 11.5px;
+  color: var(--ink-3);
+}
+.queue-pos {
+  font-size: 12.5px;
+  color: var(--ink-2);
+}
+.queue-pos b {
+  color: var(--forest);
+  font-size: 14px;
+}
+.ok-text {
+  font-size: 12.5px;
+  color: var(--forest);
+  font-weight: 600;
+}
+
+/* ---------------- 消息通知 ---------------- */
+.note-toolbar {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  padding: 12px 2px 8px;
+  font-size: 12.5px;
+  color: var(--ink-3);
+}
+.note-toolbar b {
+  color: var(--ink);
+  font-size: 13.5px;
+}
+.note-toolbar b.warn {
+  color: #b4553f;
+}
+
+.note-list {
+  display: flex;
+  flex-direction: column;
+  gap: 8px;
+  min-height: 80px;
+}
+
+.note-item {
+  position: relative;
+  display: flex;
+  gap: 11px;
+  padding: 13px 15px;
+  border: 1px solid var(--line);
+  border-radius: 10px;
+  background: #fffdf9;
+  cursor: pointer;
+  transition:
+    border-color 0.16s,
+    box-shadow 0.16s,
+    background 0.16s;
+}
+.note-item:hover {
+  border-color: #d8c9b0;
+  box-shadow: var(--shadow-sm);
+}
+.note-item.unread {
+  background: #fbf7ee;
+  border-color: #e6d9bd;
+}
+
+.note-dot {
+  width: 7px;
+  height: 7px;
+  border-radius: 50%;
+  margin-top: 7px;
+  flex: none;
+  background: #cdbfa6;
+}
+.note-dot.warn {
+  background: var(--gold);
+}
+.note-dot.ok {
+  background: var(--forest-soft);
+}
+.note-dot.bad {
+  background: #b4553f;
+}
+
+.note-main {
+  flex: 1;
+  min-width: 0;
+}
+.note-head {
+  display: flex;
+  align-items: baseline;
+  justify-content: space-between;
+  gap: 12px;
+}
+.note-head b {
+  font-size: 13.5px;
+  color: var(--ink-2);
+  font-weight: 600;
+}
+.note-item.unread .note-head b {
+  color: var(--ink);
+  font-weight: 700;
+}
+.note-head time {
+  flex: none;
+  font-size: 11.5px;
+  color: #a99e8b;
+}
+.note-main p {
+  margin: 5px 0 0;
+  font-size: 12.5px;
+  line-height: 1.65;
+  color: var(--ink-3);
+}
+.note-flag {
+  position: absolute;
+  top: 12px;
+  right: 14px;
+  font-size: 10px;
+  color: #b4553f;
+  background: #fbeee9;
+  border-radius: 999px;
+  padding: 1px 7px;
 }
 
 /* ---------------- 收藏 ---------------- */
@@ -435,6 +965,18 @@ onMounted(() => {
   display: grid;
   place-items: center;
   padding: 6px;
+}
+.fav-cover.has-cover {
+  padding: 0;
+}
+.fav-cover-img {
+  position: absolute;
+  inset: 0;
+  width: 100%;
+  height: 100%;
+  object-fit: cover;
+  object-position: center top;
+  display: block;
 }
 .spine {
   position: absolute;
@@ -492,5 +1034,20 @@ onMounted(() => {
     margin-left: 0;
     justify-content: space-between;
   }
+}
+
+/* ---------------- 账户安全 ---------------- */
+.pwd-wrap {
+  max-width: 560px;
+}
+.pwd-head h3 {
+  font-size: 15px;
+  font-weight: 700;
+}
+.pwd-head p {
+  margin: 6px 0 22px;
+  font-size: 12.5px;
+  line-height: 1.75;
+  color: var(--ink-3);
 }
 </style>

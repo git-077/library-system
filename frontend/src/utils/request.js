@@ -51,6 +51,12 @@ request.interceptors.response.use(
           ? '请求超时，请稍后重试'
           : '无法连接后端服务，请确认后端已在 8080 端口启动'
     }
+    // 5xx 时后端在响应头 X-Trace-Id 里回传追踪号：带上它，
+    // 用户截图报障就等于给出了「一次请求的全部日志」的检索键
+    const traceId = error.response?.headers?.['x-trace-id']
+    if (error.response?.status >= 500 && traceId && !message.includes(traceId)) {
+      message += `（追踪号 ${traceId}）`
+    }
     if (error.response?.status === 401) {
       localStorage.removeItem('token')
       router.push('/login')

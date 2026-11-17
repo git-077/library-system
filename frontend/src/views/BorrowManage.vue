@@ -19,6 +19,7 @@
         </el-form-item>
         <el-form-item>
           <el-button :loading="checking" @click="handleCheckOverdue">扫描逾期</el-button>
+          <el-button :loading="reminding" @click="handleDueSoon">到期提醒</el-button>
           <el-button :loading="exporting" @click="handleExport">导出 CSV</el-button>
         </el-form-item>
       </el-form>
@@ -74,7 +75,13 @@
 <script setup>
 import { ref, reactive, onMounted } from 'vue'
 import { ElMessage, ElMessageBox } from 'element-plus'
-import { checkOverdue, exportBorrows, getBorrowPage, returnBook } from '../api/borrow'
+import {
+  checkOverdue,
+  exportBorrows,
+  getBorrowPage,
+  returnBook,
+  remindDueSoon
+} from '../api/borrow'
 import { borrowStatus, borrowStatusType } from '../utils'
 
 const query = reactive({ pageNum: 1, pageSize: 10, status: null })
@@ -82,6 +89,7 @@ const list = ref([])
 const total = ref(0)
 const loading = ref(false)
 const checking = ref(false)
+const reminding = ref(false)
 const exporting = ref(false)
 
 const statusText = borrowStatus
@@ -118,6 +126,18 @@ async function handleCheckOverdue() {
     load()
   } finally {
     checking.value = false
+  }
+}
+
+/** 手动触发到期前提醒：只发给读者本人，不动借阅数据，重复点也不会重复发 */
+async function handleDueSoon() {
+  reminding.value = true
+  try {
+    const res = await remindDueSoon()
+    const d = res.data || {}
+    ElMessage.success(`已发送 ${d.sent} 条到期提醒（${d.aheadDays} 天内到期的在借记录）`)
+  } finally {
+    reminding.value = false
   }
 }
 

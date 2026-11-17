@@ -24,19 +24,22 @@
           </a>
         </nav>
 
-        <el-dropdown trigger="click" @command="onCommand">
-          <span class="user-chip">
-            <span class="avatar">{{ initial }}</span>
-            <span class="user-name">{{ store.username }}</span>
-            <span class="role-dot">读者</span>
-          </span>
-          <template #dropdown>
-            <el-dropdown-menu>
-              <el-dropdown-item command="profile">个人中心</el-dropdown-item>
-              <el-dropdown-item command="logout" divided>退出登录</el-dropdown-item>
-            </el-dropdown-menu>
-          </template>
-        </el-dropdown>
+        <div class="topbar-actions">
+          <NotificationBell />
+          <el-dropdown trigger="click" @command="onCommand">
+            <span class="user-chip">
+              <span class="avatar">{{ initial }}</span>
+              <span class="user-name">{{ store.username }}</span>
+              <span class="role-dot">读者</span>
+            </span>
+            <template #dropdown>
+              <el-dropdown-menu>
+                <el-dropdown-item command="profile">个人中心</el-dropdown-item>
+                <el-dropdown-item command="logout" divided>退出登录</el-dropdown-item>
+              </el-dropdown-menu>
+            </template>
+          </el-dropdown>
+        </div>
       </div>
     </header>
 
@@ -96,19 +99,22 @@
           <span class="header-title">{{ $route.meta.title }}</span>
           <span class="header-crumb">管理台 / {{ $route.meta.title }}</span>
         </div>
-        <el-dropdown trigger="click" @command="onCommand">
-          <span class="user-chip chip-console">
-            <span class="avatar">{{ initial }}</span>
-            {{ store.username }}
-            <span class="role-dot">管理员</span>
-          </span>
-          <template #dropdown>
-            <el-dropdown-menu>
-              <el-dropdown-item command="profile">个人中心</el-dropdown-item>
-              <el-dropdown-item command="logout" divided>退出登录</el-dropdown-item>
-            </el-dropdown-menu>
-          </template>
-        </el-dropdown>
+        <div class="header-actions">
+          <NotificationBell />
+          <el-dropdown trigger="click" @command="onCommand">
+            <span class="user-chip chip-console">
+              <span class="avatar">{{ initial }}</span>
+              {{ store.username }}
+              <span class="role-dot">管理员</span>
+            </span>
+            <template #dropdown>
+              <el-dropdown-menu>
+                <el-dropdown-item command="profile">个人中心</el-dropdown-item>
+                <el-dropdown-item command="logout" divided>退出登录</el-dropdown-item>
+              </el-dropdown-menu>
+            </template>
+          </el-dropdown>
+        </div>
       </el-header>
 
       <el-main class="main">
@@ -122,6 +128,7 @@
 import { computed } from 'vue'
 import { useRoute, useRouter } from 'vue-router'
 import { useUserStore } from '../stores/user'
+import NotificationBell from '../components/NotificationBell.vue'
 
 const route = useRoute()
 const router = useRouter()
@@ -139,6 +146,7 @@ const adminMenus = [
   { path: '/book-manage', title: '图书管理', glyph: '▤' },
   { path: '/categories', title: '分类管理', glyph: '❏' },
   { path: '/borrows', title: '借阅管理', glyph: '⇄' },
+  { path: '/reservations', title: '预约队列', glyph: '◷' },
   { path: '/users', title: '用户管理', glyph: '☺' },
   { path: '/notices', title: '系统公告', glyph: '✎' },
   { path: '/logs', title: '操作日志', glyph: '⧉' },
@@ -321,6 +329,14 @@ function onCommand(command) {
 
 .topbar-inner > :last-child {
   margin-left: auto;
+}
+
+/* 铃铛 + 用户胶囊：右侧成组，间距比 default 紧一点，视觉上是一块 */
+.topbar-actions,
+.header-actions {
+  display: flex;
+  align-items: center;
+  gap: 10px;
 }
 
 .portal-main {

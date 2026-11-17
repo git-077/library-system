@@ -17,6 +17,12 @@ export default defineConfig({
       '/api': {
         target: BACKEND,
         changeOrigin: true
+      },
+      // 上传的封面等静态资源由后端 /uploads/** 提供，同样代理过去，
+      // 这样前端里 <img src="/uploads/xxx.jpg"> 在生产（Nginx）和开发（Vite）下走同一路径
+      '/uploads': {
+        target: BACKEND,
+        changeOrigin: true
       }
     }
   },

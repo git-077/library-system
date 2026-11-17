@@ -52,6 +52,12 @@ const routes = [
         meta: { title: '借阅管理', roles: ['admin'] }
       },
       {
+        path: 'reservations',
+        name: 'ReservationManage',
+        component: () => import('../views/ReservationManage.vue'),
+        meta: { title: '预约队列', roles: ['admin'] }
+      },
+      {
         path: 'notices',
         name: 'NoticeList',
         component: () => import('../views/NoticeList.vue'),
