@@ -38,16 +38,27 @@ public class Book implements Serializable {
 
     private BigDecimal price;
 
-    /** 在馆库存 */
+    /** 在馆库存（只算「任何人都能借」的副本，不含被预约锁定的） */
     private Integer stock;
 
     /** 已借出数量 */
     private Integer borrowed;
 
+    /**
+     * 已被到书预约锁定的副本数。
+     * <p>恒等式：{@code stock + held + borrowed = 馆藏总量}。
+     * 副本从「已借出」归还时，若有人在排队就直接进 held（锁定给队首），
+     * 不进 stock，因此别人借不走；预约者借出或预约失效时再从中扣减。
+     */
+    private Integer held;
+
     /** 0下架 1上架 */
     private Integer status;
 
     private String description;
+
+    /** 封面图地址：站内相对路径（/covers/xxx.jpg）或完整 URL；为空时前端降级为配色书封 */
+    private String coverUrl;
 
     /** 软删除 */
     @TableLogic

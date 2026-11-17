@@ -4,8 +4,11 @@ import com.baomidou.mybatisplus.core.metadata.IPage;
 import com.library.common.log.Audit;
 import com.library.common.result.Result;
 import com.library.module.book.dto.BookDTO;
+import com.library.module.book.dto.ImportResultVO;
 import com.library.module.book.entity.Book;
+import com.library.module.book.service.BookImportService;
 import com.library.module.book.service.BookService;
+import jakarta.servlet.http.HttpServletResponse;
 import jakarta.validation.Valid;
 import lombok.RequiredArgsConstructor;
 import org.springframework.security.access.prepost.PreAuthorize;
@@ -18,6 +21,9 @@ import org.springframework.web.bind.annotation.RequestBody;
 import org.springframework.web.bind.annotation.RequestMapping;
 import org.springframework.web.bind.annotation.RequestParam;
 import org.springframework.web.bind.annotation.RestController;
+import org.springframework.web.multipart.MultipartFile;
+
+import java.io.IOException;
 
 /**
  * 图书接口：
@@ -30,6 +36,7 @@ import org.springframework.web.bind.annotation.RestController;
 public class BookController {
 
     private final BookService bookService;
+    private final BookImportService bookImportService;
 
     /** 分页检索：keyword 模糊匹配书名/作者/ISBN */
     @GetMapping("/page")
@@ -69,6 +76,24 @@ public class BookController {
     public Result<Void> changeStatus(@PathVariable Long id, @RequestParam Integer status) {
         bookService.changeStatus(id, status);
         return Result.ok();
+    }
+
+    /**
+     * 批量导入 CSV：校验通过的行入库，坏行逐条返回原因，其余行不受影响。
+     * 分类按名称匹配，库里没有的自动创建。
+     */
+    @PostMapping("/import")
+    @PreAuthorize("hasRole('ADMIN')")
+    @Audit(module = "图书", action = "批量导入")
+    public Result<ImportResultVO> importBooks(@RequestParam("file") MultipartFile file) {
+        return Result.ok(bookImportService.importCsv(file));
+    }
+
+    /** 下载导入模板（表头 + 两行示例，UTF-8 BOM 保证 Excel 打开不乱码） */
+    @GetMapping("/import-template")
+    @PreAuthorize("hasRole('ADMIN')")
+    public void importTemplate(HttpServletResponse response) throws IOException {
+        bookImportService.writeTemplate(response);
     }
 
     /** 删除图书（软删除，借阅历史不受影响） */

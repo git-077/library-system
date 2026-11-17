@@ -24,6 +24,9 @@ public interface UserService extends IService<User> {
     /** 管理员重置用户密码为 123456 */
     void resetPassword(Long userId);
 
+    /** 直接写入已加密的新密码（自助改密用；加密与校验由 AuthService 负责） */
+    void updatePassword(Long userId, String encodedPassword);
+
     /** 更新用户基础信息（真实姓名 / 角色 / 状态），null 字段表示不修改 */
     void updateBaseInfo(Long id, String realName, String role, Integer status);
 }

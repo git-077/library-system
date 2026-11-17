@@ -160,6 +160,12 @@ INSERT INTO `book`
 -- 医学
 ('9787508643324', '癌症传：众病之王', '悉达多·穆克吉', '中信出版社', @c_yx, 98.00, 3, 0, 1, '普利策奖作品，讲述人类与癌症抗争的千年史。');
 
+-- ---------- 4.1 封面图回填（frontend/public/covers 下的静态资源，路径由前端直接访问）----------
+UPDATE `book` SET `cover_url` = '/covers/9787508643324.jpg' WHERE `isbn` = '9787508643324';
+UPDATE `book` SET `cover_url` = '/covers/9787550268513.jpg' WHERE `isbn` = '9787550268513';
+UPDATE `book` SET `cover_url` = '/covers/9787560028910.jpg' WHERE `isbn` = '9787560028910';
+UPDATE `book` SET `cover_url` = '/covers/9787508649715.jpg' WHERE `isbn` = '9787508649715';
+
 -- ---------- 5. 用户（补 8 个读者，密码均为 123456）----------
 INSERT IGNORE INTO `user` (`username`, `password`, `real_name`, `role`, `status`, `deleted`) VALUES
 ('reader3',  '$2a$10$xIeW4yPuM0gYLLeZvZdO1.uBn4MmUCNsj9Vjm4XwgyO1DmZ8VZHce', '陈晨',   'user', 1, 0),

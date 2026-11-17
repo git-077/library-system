@@ -65,6 +65,19 @@ public class UserServiceImpl extends ServiceImpl<UserMapper, User> implements Us
     }
 
     @Override
+    public void updatePassword(Long userId, String encodedPassword) {
+        if (userId == null || encodedPassword == null || encodedPassword.isBlank()) {
+            throw new BizException("密码参数不合法");
+        }
+        boolean updated = update(new LambdaUpdateWrapper<User>()
+                .eq(User::getId, userId)
+                .set(User::getPassword, encodedPassword));
+        if (!updated) {
+            throw new BizException("用户不存在");
+        }
+    }
+
+    @Override
     public void updateBaseInfo(Long id, String realName, String role, Integer status) {
         if (getById(id) == null) {
             throw new BizException("用户不存在");

@@ -11,7 +11,7 @@ import java.math.BigDecimal;
  * 图书新增 / 编辑入参。
  * <p>不含 id、borrowed、deleted、createTime 等由服务端维护的字段；
  * 库存 stock 只在新增时生效，编辑时被忽略（由借阅事务维护）。
- * <p><b>字段长度必须与 sql/init.sql 中的列定义保持一致</b>，
+ * <p><b>字段长度必须与 db/migration 下的建表脚本（V1__baseline_schema.sql）保持一致</b>，
  * 否则超出列长度会在 insert 时抛 DataTooLong 变成 500。
  */
 @Data
@@ -49,6 +49,10 @@ public class BookDTO {
     /** book.description VARCHAR(500) */
     @Size(max = 500, message = "简介不能超过 500 个字符")
     private String description;
+
+    /** book.cover_url VARCHAR(255)：站内相对路径或完整 URL，留空则前端使用配色书封 */
+    @Size(max = 255, message = "封面地址不能超过 255 个字符")
+    private String coverUrl;
 
     /** 0下架 1上架，新增时为空默认上架 */
     private Integer status;

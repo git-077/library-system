@@ -48,7 +48,7 @@ class AuthControllerTest {
     @Test
     @DisplayName("登录成功：返回 code=200 与 token，且响应含统一字段")
     void loginSuccess_shouldReturnToken() throws Exception {
-        given(authService.login(any())).willReturn(new LoginVO("jwt-token-value", 1L, "admin", "admin"));
+        given(authService.login(any(), any())).willReturn(new LoginVO("jwt-token-value", 1L, "admin", "admin"));
 
         mockMvc.perform(post("/api/auth/login")
                         .contentType(MediaType.APPLICATION_JSON)
@@ -74,13 +74,13 @@ class AuthControllerTest {
                 .andExpect(status().isBadRequest())
                 .andExpect(jsonPath("$.code").value(400));
 
-        verify(authService, never()).login(any());
+        verify(authService, never()).login(any(), any());
     }
 
     @Test
     @DisplayName("密码错误：Service 抛业务异常，转换为 code=400 + 原始文案")
     void loginWithWrongPassword_shouldReturnBizMessage() throws Exception {
-        given(authService.login(any())).willThrow(new BizException("用户名或密码错误"));
+        given(authService.login(any(), any())).willThrow(new BizException("用户名或密码错误"));
 
         mockMvc.perform(post("/api/auth/login")
                         .contentType(MediaType.APPLICATION_JSON)
@@ -109,7 +109,7 @@ class AuthControllerTest {
     @Test
     @DisplayName("登录请求体字段能正确绑定到 DTO")
     void loginShouldBindRequestFields() throws Exception {
-        given(authService.login(any())).willReturn(new LoginVO("t", 1L, "reader", "user"));
+        given(authService.login(any(), any())).willReturn(new LoginVO("t", 1L, "reader", "user"));
 
         mockMvc.perform(post("/api/auth/login")
                 .contentType(MediaType.APPLICATION_JSON)
@@ -118,7 +118,7 @@ class AuthControllerTest {
                         """));
 
         ArgumentCaptor<LoginDTO> captor = ArgumentCaptor.forClass(LoginDTO.class);
-        verify(authService).login(captor.capture());
+        verify(authService).login(captor.capture(), any());
         // Controller 不做 trim，trim 在 Service 层完成；此处断言原始值已到达服务层
         assertThat(captor.getValue().getPassword()).isEqualTo("123456");
         assertThat(captor.getValue().getUsername()).contains("reader");
@@ -132,5 +132,50 @@ class AuthControllerTest {
         mockMvc.perform(get("/api/auth/me"))
                 .andExpect(status().isUnauthorized())
                 .andExpect(jsonPath("$.code").value(401));
+    }
+
+    @Test
+    @DisplayName("修改密码：新密码过短被参数校验拦截，不会进入 Service")
+    void changePasswordWithShortNewPassword_shouldFailValidation() throws Exception {
+        mockMvc.perform(post("/api/auth/password")
+                        .contentType(MediaType.APPLICATION_JSON)
+                        .content("""
+                                {"oldPassword":"admin123","newPassword":"123"}
+                                """))
+                .andExpect(status().isBadRequest())
+                .andExpect(jsonPath("$.code").value(400));
+
+        verify(authService, never()).changePassword(any());
+    }
+
+    @Test
+    @DisplayName("修改密码：原密码错误由 Service 抛业务异常，返回 code=400")
+    void changePasswordWithWrongOldPassword_shouldReturn400() throws Exception {
+        Mockito.doThrow(new BizException("原密码不正确"))
+                .when(authService).changePassword(any());
+
+        mockMvc.perform(post("/api/auth/password")
+                        .contentType(MediaType.APPLICATION_JSON)
+                        .content("""
+                                {"oldPassword":"wrongOld","newPassword":"newPass123"}
+                                """))
+                .andExpect(status().isBadRequest())
+                .andExpect(jsonPath("$.code").value(400))
+                .andExpect(jsonPath("$.message").value("原密码不正确"));
+    }
+
+    @Test
+    @DisplayName("登录被锁定：HTTP 429 与 body.code 429 保持一致")
+    void loginLocked_shouldReturn429() throws Exception {
+        given(authService.login(any(), any())).willThrow(
+                new BizException(429, "密码错误次数过多，账号已临时锁定 15 分钟"));
+
+        mockMvc.perform(post("/api/auth/login")
+                        .contentType(MediaType.APPLICATION_JSON)
+                        .content("""
+                                {"username":"admin","password":"admin123"}
+                                """))
+                .andExpect(status().isTooManyRequests())
+                .andExpect(jsonPath("$.code").value(429));
     }
 }

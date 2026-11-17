@@ -1,11 +1,15 @@
 package com.library.module.auth.controller;
 
+import com.library.common.log.Audit;
 import com.library.common.result.Result;
+import com.library.common.util.IpUtil;
+import com.library.module.auth.dto.ChangePasswordDTO;
 import com.library.module.auth.dto.LoginDTO;
 import com.library.module.auth.dto.LoginVO;
 import com.library.module.auth.dto.RegisterDTO;
 import com.library.module.auth.dto.UserInfoVO;
 import com.library.module.auth.service.AuthService;
+import jakarta.servlet.http.HttpServletRequest;
 import jakarta.validation.Valid;
 import lombok.RequiredArgsConstructor;
 import org.springframework.web.bind.annotation.GetMapping;
@@ -26,8 +30,9 @@ public class AuthController {
     private final AuthService authService;
 
     @PostMapping("/login")
-    public Result<LoginVO> login(@Valid @RequestBody LoginDTO dto) {
-        return Result.ok(authService.login(dto));
+    public Result<LoginVO> login(@Valid @RequestBody LoginDTO dto, HttpServletRequest request) {
+        // IP 在 Controller 解析后传给 Service，Service 不依赖 Servlet API，便于单测
+        return Result.ok(authService.login(dto, IpUtil.getClientIp(request)));
     }
 
     @PostMapping("/register")
@@ -40,5 +45,13 @@ public class AuthController {
     @GetMapping("/me")
     public Result<UserInfoVO> me() {
         return Result.ok(authService.currentUser());
+    }
+
+    /** 自助修改密码：需登录，且必须提供正确的原密码 */
+    @PostMapping("/password")
+    @Audit(module = "账户", action = "修改密码")
+    public Result<Void> changePassword(@Valid @RequestBody ChangePasswordDTO dto) {
+        authService.changePassword(dto);
+        return Result.ok();
     }
 }

@@ -2,12 +2,15 @@ package com.library.common.util;
 
 import jakarta.servlet.http.HttpServletResponse;
 
+import java.io.BufferedReader;
 import java.io.IOException;
 import java.io.OutputStream;
+import java.io.Reader;
 import java.net.URLEncoder;
 import java.nio.charset.StandardCharsets;
 import java.time.LocalDateTime;
 import java.time.format.DateTimeFormatter;
+import java.util.ArrayList;
 import java.util.List;
 
 /**
@@ -67,6 +70,94 @@ public final class CsvUtil {
         }
         // Excel 对 \r\n 兼容最好
         sb.append("\r\n");
+    }
+
+    /**
+     * 解析 CSV 文本为「行 → 单元格」结构。
+     *
+     * <p>按 RFC 4180 处理引号：被双引号包裹的字段可以包含逗号、换行，
+     * 内部的 {@code ""} 表示一个双引号字符。同时兼容三种常见脏数据：
+     * <ul>
+     *   <li>UTF-8 BOM（Excel 另存为 CSV 时必然带），不剥掉会让第一列表头变成 {@code \uFEFFisbn}；</li>
+     *   <li>CRLF / CR / LF 三种换行混用；</li>
+     *   <li>整行空行（只跳过硬空白行，不动数据行）。</li>
+     * </ul>
+     */
+    public static List<List<String>> parse(Reader reader) throws IOException {
+        Reader in = reader.markSupported() ? reader : new BufferedReader(reader);
+        List<List<String>> rows = new ArrayList<>();
+        List<String> row = new ArrayList<>();
+        StringBuilder cell = new StringBuilder();
+        boolean inQuotes = false;
+        boolean rowHasContent = false;
+        int ch;
+        while ((ch = in.read()) != -1) {
+            char c = (char) ch;
+            // 首个字符是 BOM 时直接丢弃
+            if (c == '\uFEFF' && rows.isEmpty() && row.isEmpty() && cell.isEmpty()) {
+                continue;
+            }
+            if (inQuotes) {
+                if (c == '"') {
+                    in.mark(1);
+                    int next = in.read();
+                    if (next == '"') {
+                        cell.append('"');
+                    } else {
+                        inQuotes = false;
+                        if (next != -1) {
+                            in.reset();
+                        }
+                    }
+                } else {
+                    cell.append(c);
+                }
+                continue;
+            }
+            switch (c) {
+                case '"' -> {
+                    inQuotes = true;
+                    rowHasContent = true;
+                }
+                case ',' -> {
+                    row.add(cell.toString().trim());
+                    cell.setLength(0);
+                    rowHasContent = true;
+                }
+                case '\r' -> {
+                    // 交给 \n 处理；单独的 \r 换行在下一轮判断
+                    in.mark(1);
+                    if (in.read() != '\n') {
+                        in.reset();
+                    }
+                    finishRow(rows, row, cell, rowHasContent);
+                    rowHasContent = false;
+                }
+                case '\n' -> {
+                    finishRow(rows, row, cell, rowHasContent);
+                    rowHasContent = false;
+                }
+                default -> {
+                    cell.append(c);
+                    if (!Character.isWhitespace(c)) {
+                        rowHasContent = true;
+                    }
+                }
+            }
+        }
+        finishRow(rows, row, cell, rowHasContent);
+        return rows;
+    }
+
+    private static void finishRow(List<List<String>> rows, List<String> row,
+                                  StringBuilder cell, boolean rowHasContent) {
+        if (!rowHasContent && row.isEmpty() && cell.isEmpty()) {
+            return;
+        }
+        row.add(cell.toString().trim());
+        cell.setLength(0);
+        rows.add(new ArrayList<>(row));
+        row.clear();
     }
 
     /** 转义：含分隔符或引号时整体加引号，内部引号翻倍 */

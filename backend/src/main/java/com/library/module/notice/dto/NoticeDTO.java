@@ -6,7 +6,7 @@ import lombok.Data;
 
 /**
  * 公告新增 / 编辑入参。
- * <p>长度与 sql/init.sql 的 notice 表列定义保持一致（content 为 TEXT）。
+ * <p>长度与 db/migration 中 notice 表的列定义保持一致（content 为 TEXT）。
  */
 @Data
 public class NoticeDTO {
