@@ -19,7 +19,15 @@ RUN apt-get update \
 # 以非 root 用户运行，降低容器逃逸风险
 RUN useradd -r -u 1001 -m appuser
 COPY --from=build /app/target/*.jar app.jar
-RUN chown -R appuser:appuser /app
+# 预建两个挂载点并交权给 appuser。
+# docker compose 会把命名卷挂到 /app/logs 与 /app/uploads；如果镜像里没有这两个目录，
+# Docker 运行时才创建它们，属主是 root:root，非 root 的 appuser 写不进去，
+# 表现为「上传封面 500」和「prod 日志文件写不出来」。
+# 放一个 .keep 让目录非空：Docker 只在挂载点非空时才把内容和属主复制进新卷，
+# 空目录的卷根仍是 root，这一步是「非 root 容器 + 命名卷」的关键。
+RUN mkdir -p /app/logs /app/uploads \
+    && touch /app/logs/.keep /app/uploads/.keep \
+    && chown -R appuser:appuser /app
 USER appuser
 
 EXPOSE 8080

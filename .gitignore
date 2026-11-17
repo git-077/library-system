@@ -51,3 +51,14 @@ library-system-src.zip
 # ===== 截图产物（脚本调试用）=====
 screenshots/
 *.png.orig
+
+# ===== 运行期上传文件 =====
+# 用户上传的封面属于运行数据，不进版本库（目录结构与访问路径由代码创建）
+backend/uploads/
+uploads/
+
+# ===== 运行期日志 =====
+# prod profile 下按天滚动的 JSON 日志与历史归档
+backend/logs/
+logs/
+*.log.gz

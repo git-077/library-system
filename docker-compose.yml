@@ -10,10 +10,12 @@ services:
       TZ: Asia/Shanghai
     ports:
       # 宿主机用 13306，避免与本机已安装的 MySQL（3306）冲突；
-      # 容器内仍是标准 3306，后端通过服务名 mysql:3306 访问
-      - "13306:3306"
+      # 容器内仍是标准 3306，后端通过服务名 mysql:3306 访问。
+      # 只绑回环地址：公网无法直连数据库，需要看数据时用 SSH 隧道或 Navicat over SSH
+      - "127.0.0.1:13306:3306"
     volumes:
-      - ./sql/init.sql:/docker-entrypoint-initdb.d/init.sql:ro
+      # 不再挂载 init.sql：表结构由后端启动时的 Flyway 迁移创建（backend/src/main/resources/db/migration），
+      # 这样容器、本机、CI 三种环境用的是同一份 DDL，不会出现「忘记执行脚本」导致的结构漂移
       - mysql-data:/var/lib/mysql
     command: --character-set-server=utf8mb4 --collation-server=utf8mb4_general_ci
     healthcheck:
@@ -38,8 +40,27 @@ services:
       CORS_ORIGINS: ${CORS_ORIGINS:-http://localhost,http://127.0.0.1}
       # 容器内关闭 SQL 打印，减少日志噪音
       MYBATIS_LOG_IMPL: org.apache.ibatis.logging.nologging.NoLoggingImpl
+      # prod profile：日志输出为单行 JSON（含 traceId 等 MDC 字段），便于日志平台聚合
+      SPRING_PROFILES_ACTIVE: ${SPRING_PROFILES_ACTIVE:-prod}
+      LOG_DIR: /app/logs
+      # JVM 参数可在 .env 里用 JAVA_OPTS 覆盖。
+      # 默认按容器内存的 75% 设堆；2 核 2G 的机器建议在 .env 写 -Xms256m -Xmx512m，
+      # 否则 MySQL 与 JVM 会互相抢内存
+      JAVA_OPTS: "${JAVA_OPTS:--XX:MaxRAMPercentage=75.0 -Duser.timezone=Asia/Shanghai}"
     ports:
-      - "8080:8080"
+      # 只绑回环：对外只暴露前端 80，后端 API 由 Nginx 容器内部反代（backend:8080）。
+      # 想在浏览器里看 Swagger 或 actuator，用 SSH 隧道：
+      #   ssh -L 8080:127.0.0.1:8080 user@server   然后访问 http://localhost:8080/swagger-ui.html
+      - "127.0.0.1:8080:8080"
+    volumes:
+      # 持久化 JSON 日志，容器重建后仍可回溯；宿主机查看：
+      # docker compose exec backend ls /app/logs/archive
+      - backend-logs:/app/logs
+      # 后台「上传封面」落在这个目录（library.upload.dir 默认 ./uploads）。
+      # 不挂卷的话，docker compose up --build 重建容器时读者/管理员上传的封面会随容器一起消失，
+      # 而 book.cover_url 还留在数据库里，表现为「图片 404 但数据正常」。
+      # 备份见 DEPLOY.md「备份与恢复」。
+      - backend-uploads:/app/uploads
     depends_on:
       mysql:
         condition: service_healthy
@@ -70,3 +91,5 @@ services:
 
 volumes:
   mysql-data:
+  backend-logs:
+  backend-uploads:
