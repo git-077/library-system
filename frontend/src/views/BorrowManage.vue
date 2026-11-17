@@ -20,7 +20,13 @@
         <el-form-item>
           <el-button :loading="checking" @click="handleCheckOverdue">扫描逾期</el-button>
           <el-button :loading="reminding" @click="handleDueSoon">到期提醒</el-button>
-          <el-button :loading="exporting" @click="handleExport">导出 CSV</el-button>
+          <el-button :loading="exporting" @click="handleExport">导出记录</el-button>
+        </el-form-item>
+        <el-form-item label="格式">
+          <el-select v-model="exportFormat" style="width: 130px">
+            <el-option label="Excel (xlsx)" value="xlsx" />
+            <el-option label="CSV" value="csv" />
+          </el-select>
         </el-form-item>
       </el-form>
 
@@ -91,6 +97,8 @@ const loading = ref(false)
 const checking = ref(false)
 const reminding = ref(false)
 const exporting = ref(false)
+/** 导出文件格式：xlsx 用 EasyExcel 产出真 Excel（数字列可直接求和），csv 兼容脚本处理 */
+const exportFormat = ref('xlsx')
 
 const statusText = borrowStatus
 const statusType = borrowStatusType
@@ -141,16 +149,19 @@ async function handleDueSoon() {
   }
 }
 
-/** 触发浏览器下载：后端已写好 UTF-8 BOM，Excel 双击打开不乱码 */
+/** 触发浏览器下载：CSV 已写 UTF-8 BOM，xlsx 为标准 Excel 文件，双击打开均不乱码 */
 async function handleExport() {
   exporting.value = true
   try {
-    const blob = await exportBorrows({ status: query.status ?? undefined })
+    const blob = await exportBorrows({
+      status: query.status ?? undefined,
+      format: exportFormat.value
+    })
     const url = URL.createObjectURL(blob)
     const a = document.createElement('a')
     const stamp = new Date().toISOString().slice(0, 10).replace(/-/g, '')
     a.href = url
-    a.download = `borrows-${stamp}.csv`
+    a.download = `borrows-${stamp}.${exportFormat.value}`
     document.body.appendChild(a)
     a.click()
     a.remove()

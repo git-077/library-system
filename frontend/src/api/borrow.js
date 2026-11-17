@@ -13,6 +13,6 @@ export const checkOverdue = () => request.post('/borrows/overdue-check')
 export const remindDueSoon = aheadDays =>
   request.post('/borrows/due-soon-remind', null, { params: { aheadDays } })
 
-/** 导出借阅记录 CSV（管理员），返回 Blob */
+/** 导出借阅记录（管理员）：format=xlsx 输出 Excel（EasyExcel）、默认 CSV，返回 Blob */
 export const exportBorrows = params =>
   request.get('/borrows/export', { params, responseType: 'blob' })

@@ -4,6 +4,7 @@ import com.baomidou.mybatisplus.core.metadata.IPage;
 import com.library.common.log.Audit;
 import com.library.common.result.Result;
 import com.library.common.util.CsvUtil;
+import com.library.common.util.ExcelUtil;
 import com.library.module.borrow.dto.OverdueCheckVO;
 import com.library.module.borrow.entity.BorrowRecord;
 import com.library.module.borrow.service.BorrowService;
@@ -115,18 +116,20 @@ public class BorrowController {
     }
 
     /**
-     * 导出借阅记录 CSV（仅管理员）。
+     * 导出借阅记录（仅管理员），format=xlsx 输出 Excel、其余（默认）输出 CSV。
      *
      * <p>直接写响应流而不是先落盘：数据量再大也只是流式输出，
-     * 不需要为临时文件管理磁盘与清理策略。
+     * 不需要为临时文件管理磁盘与清理策略。两种格式的列与取数完全一致，
+     * 只是写出器不同——数据组装只写一遍，避免「Excel 版少了某列」的漂移。
      */
     @GetMapping("/export")
     @PreAuthorize("hasRole('ADMIN')")
-    @Audit(module = "借阅", action = "导出CSV", saveParams = false)
+    @Audit(module = "借阅", action = "导出记录", saveParams = false)
     public void export(@RequestParam(required = false) Integer status,
+                       @RequestParam(required = false, defaultValue = "csv") String format,
                        HttpServletResponse response) throws IOException {
         List<BorrowRecord> records = borrowService.listForExport(status);
-        List<List<?>> rows = new ArrayList<>(records.size());
+        List<List<Object>> rows = new ArrayList<>(records.size());
         LocalDateTime now = LocalDateTime.now();
         for (BorrowRecord r : records) {
             // 逾期天数只对在借记录有意义；已归还的显示归还时间即可
@@ -148,7 +151,11 @@ public class BorrowController {
                     r.getRenewCount()
             ));
         }
-        CsvUtil.write(response, "borrows", CSV_HEADER, rows);
+        if ("xlsx".equalsIgnoreCase(format)) {
+            ExcelUtil.write(response, "borrows", CSV_HEADER, rows);
+        } else {
+            CsvUtil.write(response, "borrows", CSV_HEADER, rows);
+        }
     }
 
     private static final List<String> CSV_HEADER = List.of(

@@ -38,7 +38,7 @@ public final class CsvUtil {
      * @param fileNamePrefix 文件名前缀，最终文件名形如 borrows-20261116-134500.csv
      */
     public static void write(HttpServletResponse response, String fileNamePrefix,
-                             List<String> header, List<List<?>> rows) throws IOException {
+                             List<String> header, List<? extends List<?>> rows) throws IOException {
         String fileName = fileNamePrefix + "-" + LocalDateTime.now().format(STAMP) + ".csv";
         response.reset();
         response.setContentType("text/csv;charset=UTF-8");

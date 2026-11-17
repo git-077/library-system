@@ -5,7 +5,7 @@
 > / Vue 3 + Vite 5 + Element Plus + Pinia / ECharts 6（统计图表）
 >
 > **运行状态：本机已实测跑通**（Java 17.0.8、Maven 3.6.1、Node 22、MySQL 8.0.33）。
-> 后端接口自检 13 项 + 写接口回归 17 项全部通过；测试 52 项（49 个单测通过，3 个 Testcontainers 集成用例本机无 Docker 自动跳过）；
+> 后端接口自检 13 项 + 写接口回归 17 项全部通过；测试 61 项（58 个单测通过，3 个 Testcontainers 集成用例本机无 Docker 自动跳过）；
 > 前端 `npm run build` 与 `eslint` 均通过，统计页 / 操作日志页 / 借阅管理页已用无头 Chrome 截图验证，控制台无报错。
 >
 > **工程规范**：`.editorconfig` + `.gitattributes` 统一编码换行、ESLint + Prettier 静态检查、
@@ -142,6 +142,7 @@ library-system/
 │       │   │   ├── result/Result.java        # 统一响应 {code,message,data,timestamp}
 │       │   │   ├── security/                 # JwtUtil / JwtAuthenticationFilter / LoginUser / SecurityUtil
 │       │   │   ├── util/CsvUtil.java         # CSV 导出与解析（UTF-8 BOM + 字段转义 + 引号状态机）
+│       │   │   ├── util/ExcelUtil.java       # xlsx 导出（EasyExcel 无实体模型写法，自适应列宽）
 │       │   │   ├── util/IpUtil.java          # 真实客户端 IP（X-Forwarded-For 优先），审计与限流共用
 │       │   │   └── web/RootController.java   # 根路径探针，避免把 8080 当页面地址访问
 │       │   └── module/                       # 业务模块：统一 controller / dto / entity / mapper / service(+impl)
@@ -299,7 +300,9 @@ PASS | 公告发布、查询、编辑、空标题被 @Valid 拦截
   窗口 `now <= due_date <= now + due-soon-days(3)`，两端都闭；已逾期的**不在**窗口内（那是催还公告的职责）。
   幂等键 `DUE_SOON:借阅ID:应还日期` 带日期，读者续借后应还日期变了会再提醒一次，同一日期绝不重复。
   窗口判定抽在 `DueSoonPolicy`（纯函数），边界由此可以被单测钉死。
-- **CSV 导出**：`CsvUtil` 零依赖实现，写 UTF-8 BOM 保证 Excel 打开不乱码，含逗号/引号的书名正确转义。
+- **借阅记录导出（CSV / Excel）**：同一份表头与数据，按 `format` 参数二选一——`CsvUtil` 零依赖实现
+  （UTF-8 BOM 保证 Excel 打开不乱码，含逗号/引号的书名正确转义）；`format=xlsx` 走 `ExcelUtil`（EasyExcel
+  无实体模型写法，锁 3.3.4 因 3.4+ 要 Java 21），自适应列宽、数字列是真 Number 可直接求和、空数据也产出合法文件。
 - **图书封面**：`book.cover_url` 存封面地址（站内相对路径 `/covers/xxx.jpg` 或完整 URL）。
   有值 → 门户卡片、详情弹窗、收藏列表、后台表格统一展示真实封面；为空或图片 404 → 自动降级为「配色书封」
   （按 `id % 5` 取稳定配色 + 书名 + ISBN），因此没有封面的书也不会出现破图。封面图放在 `frontend/public/covers/`，
@@ -338,7 +341,7 @@ PASS | 公告发布、查询、编辑、空标题被 @Valid 拦截
 | GET | /api/borrows/page | ADMIN | 全部借阅记录（分页） |
 | POST | /api/borrows/overdue-check | ADMIN | 手动触发逾期扫描（刷新标记 + 发布催还公告，幂等） |
 | POST | /api/borrows/due-soon-remind | ADMIN | 手动触发到期前提醒（幂等，可不传 aheadDays 用配置值） |
-| GET | /api/borrows/export | ADMIN | 导出借阅记录 CSV（带 BOM，Excel 可直接打开） |
+| GET | /api/borrows/export | ADMIN | 导出借阅记录（`format=xlsx` 为 Excel，默认 CSV 带 BOM） |
 | POST | /api/reservations?bookId= | 登录 | 预约一本已借完的书（有库存 / 有逾期 / 已在借时拒绝） |
 | DELETE | /api/reservations/{id} | 登录 | 取消预约（本人或管理员；待取书会顺延给下一位） |
 | GET | /api/reservations/my | 登录 | 我的预约（含排队位置、保留截止时间） |
@@ -474,7 +477,7 @@ npm run format:check  # 只检查不改动（CI 用这个）
 
 ```bash
 cd backend
-mvn test                            # 52 个测试：49 个单测通过 + 3 个集成用例（无 Docker 时自动跳过）
+mvn test                            # 61 个测试：58 个单测通过 + 3 个集成用例（无 Docker 时自动跳过）
 mvn test -Dtest=JwtUtilTest         # 只跑某个类
 ```
 
@@ -484,6 +487,7 @@ mvn test -Dtest=JwtUtilTest         # 只跑某个类
 | `AuthControllerTest` | 登录成功返回统一结构、空用户名被校验拦截、密码错误转换业务异常、注册用户名过短被拦截、未登录访问 `/api/auth/me` 返回 401、改密参数校验、锁定返回 429 |
 | `LoginAttemptServiceTest` | 连续失败 5 次锁定、剩余次数递减、成功登录清零、同 IP 超阈值限流、失败计数按账号累计 |
 | `CsvUtilTest` | CSV 解析边界：引号内逗号/换行、`""` 转义、BOM 剥离、CRLF/CR/LF 混用、空行跳过、`escape` 与 `parse` 互逆 |
+| `ExcelUtilTest` | EasyExcel 写出后用 POI 读回：表头/数据逐格一致、中文不乱码、数字列是 Number 类型、空数据仍产出合法文件、非法工作表名被替换且 ≤31 字符、1000 行流式写出 |
 | `TraceIdFilterTest` | traceId 自动生成、上游透传、非法值（含换行注入）被替换、访问日志 MDC 字段、500 文案带追踪号、请求后 MDC 清空、静默路径不刷日志 |
 | `DueSoonPolicyTest` | 提醒窗口两端边界（今天到期 / 第 N 天 / 第 N+1 天 / 晚 1 秒）、已逾期不重复提醒、应还时间为空、幂等键随续借变化 |
 | `ReservationServiceImplTest` | 让位三条不变量：无可锁定副本时放弃、队首被抢占时归还副本（防 `held` 泄漏）、正常让位发通知且幂等键按预约 ID 生成；取消「排队中」不碰库存、取消「待取书」释放副本、读者不能取消他人预约 |
@@ -663,6 +667,7 @@ grep 3f4931dc6dd94d6ea8883466d04e0c7b logs/library-backend.log | jq -s '.[] | {t
 | **操作审计（AOP）** | `@Audit` 注解 + `OperationLogAspect`，记录操作人/模块/动作/URI/IP/入参/耗时/结果，密码字段打码；管理端「操作日志」页可按模块与结果筛选 | 实测成功与失败（`分类名称已存在`）两类记录均落库，读者访问返回 403 |
 | **逾期自动处理** | `@Scheduled` 每日 01:00 刷新 `borrow_record.overdue` 并发布催还公告（同日幂等），另有管理员手动触发接口 | 手动触发两次：首次 `markedCount=1 / noticeCreated=true`，二次 `markedCount=0 / noticeCreated=false` |
 | **CSV 导出** | `CsvUtil` 零依赖实现，UTF-8 BOM + 字段转义 | 导出 1376 字节文件，`xxd` 首三字节为 `efbbbf`，中文列名与书名正常 |
+| **Excel 导出** | `ExcelUtil`（EasyExcel 3.3.4 无实体模型写法，锁版本因 3.4+ 要 Java 21），`/api/borrows/export?format=xlsx` 与 CSV 共用同一份取数 | `ExcelUtilTest` 4 项：POI 读回逐格断言（中文/数字类型/空数据/非法表名/1000 行流式）全过；前端导出按钮支持格式选择 |
 | **Testcontainers 集成测试** | 真实 MySQL 容器 + Flyway 同源迁移，覆盖扣库存、缺货失败、并发不超借 | 本机无 Docker → `Skipped: 3`；CI 中真正执行 |
 | **Flyway 数据库版本管理** | 表结构收敛到 `db/migration/V1、V2`，启动自动迁移并记录 `flyway_schema_history`；存量库靠 `baseline-on-migrate` + 幂等脚本平滑接管 | 存量库启动日志：`Creating Schema History table ... with baseline` → `Successfully applied 2 migrations`，53 本图书/15 条借阅数据无损 |
 | **密码自助修改 + 登录防爆破** | `POST /api/auth/password` 校验原密码；登录按账号失败 5 次锁定 15 分钟、按 IP 每分钟限流 20 次（429） | 实测：第 1~4 次提示剩余次数，第 5 次返回 429；锁定期间正确密码同样被拒；改密后新密码可登录、旧密码失效 |

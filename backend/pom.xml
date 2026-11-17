@@ -100,6 +100,15 @@
       <version>7.4</version>
     </dependency>
 
+    <!-- Excel 导出：EasyExcel（阿里），流式写不撑爆内存。
+         依赖自带 POI 5.2.x，与 Spring Boot BOM 无冲突；
+         版本锁 3.3.4：3.4+ 需要 Java 21，本项目是 Java 17 -->
+    <dependency>
+      <groupId>com.alibaba</groupId>
+      <artifactId>easyexcel</artifactId>
+      <version>3.3.4</version>
+    </dependency>
+
     <!-- 接口文档：Swagger UI（/swagger-ui.html） -->
     <dependency>
       <groupId>org.springdoc</groupId>
