@@ -42,14 +42,22 @@ request.interceptors.response.use(
     return Promise.reject(new Error(result.message || '请求失败'))
   },
   error => {
+    const status = error.response?.status
     const result = error.response?.data
-    // 没有 response 说明请求没到后端（后端未启动 / 端口不通 / 超时），给出可操作的提示
-    let message = result?.message
+    // 后端可能返回非 JSON（网关错误页等），只有对象才取 message，避免出现 [object Object] 或空白提示
+    let message = result && typeof result === 'object' ? result.message : ''
     if (!message) {
-      message =
-        error.code === 'ECONNABORTED'
-          ? '请求超时，请稍后重试'
-          : '无法连接后端服务，请确认后端已在 8080 端口启动'
+      if (error.code === 'ECONNABORTED') {
+        message = '请求超时，请稍后重试'
+      } else if (!error.response) {
+        // 请求没有到达服务端：断网、被拦截或后端未启动
+        message = '网络连接失败，请检查网络后重试；若持续出现，说明后端服务暂时不可用'
+      } else if (status === 502 || status === 503 || status === 504) {
+        // 网关/反代拿不到后端：远程部署时最常见的情况
+        message = '后端服务暂时不可用，请稍后重试'
+      } else {
+        message = `请求失败（${status}），请稍后重试`
+      }
     }
     // 5xx 时后端在响应头 X-Trace-Id 里回传追踪号：带上它，
     // 用户截图报障就等于给出了「一次请求的全部日志」的检索键

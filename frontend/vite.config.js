@@ -13,6 +13,9 @@ export default defineConfig({
     host: '0.0.0.0',
     port: 5173,
     strictPort: true,
+    // 允许内网穿透域名访问（Cloudflare quick tunnel 的 *。trycloudflare.com 每次重启会变，
+    // 所以按后缀放行）；只在本机/局域网调试时此项不影响
+    allowedHosts: ['.trycloudflare.com', '.vicp.net', '.gicp.net', '.zicp.net', '.oicp.net', '.oray.net'],
     proxy: {
       '/api': {
         target: BACKEND,
